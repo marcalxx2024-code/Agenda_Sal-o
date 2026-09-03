@@ -62,17 +62,21 @@ select lives_ok(
   'a conta do salao cadastra servicos'
 );
 select lives_ok(
-  $$insert into public.appointments (client_id, performed_on)
-    select id, date '2025-01-31' from public.clients
-    where name = 'Cliente Exemplo'$$,
-  'a conta do salao cadastra atendimento'
+  $$select * from public.create_appointment_with_services(
+      (select id from public.clients where name = 'Cliente Exemplo'),
+      date '2025-01-31',
+      array(
+        select id from public.services
+        where name in ('Tratamento Exemplo', 'Corte Exemplo')
+        order by id
+      )
+    )$$,
+  'a conta do salao cadastra atendimento pela RPC'
 );
-select lives_ok(
-  $$insert into public.appointment_services (appointment_id, service_id)
-    select a.id, s.id
-    from public.appointments a cross join public.services s
-    where a.performed_on = date '2025-01-31'$$,
-  'um atendimento aceita varios servicos'
+select is(
+  (select count(*) from public.appointment_services),
+  2::bigint,
+  'um atendimento criado pela RPC aceita varios servicos'
 );
 
 select is(
@@ -105,13 +109,19 @@ select results_eq(
   'corrigir a data do atendimento recalcula os retornos com o snapshot'
 );
 
-update public.returns
-set contacted_at = now(), contact_note = 'Contato confirmado manualmente'
-where due_on = date '2025-03-28';
+do $$
+begin
+  perform *
+  from public.mark_return_contacted(
+    (select id from public.returns where due_on = date '2025-03-28'),
+    'Contato confirmado manualmente'
+  );
+end;
+$$;
 select is(
   (select count(*) from public.pending_returns where contacted_at is not null),
   1::bigint,
-  'contato manual nao conclui automaticamente o retorno pendente'
+  'contato via RPC nao conclui automaticamente o retorno pendente'
 );
 
 set local "request.jwt.claims" =

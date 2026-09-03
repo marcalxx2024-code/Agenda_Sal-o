@@ -43,8 +43,16 @@ próprio atendimento for corrigida, os retornos daquele atendimento são
 recalculados usando o intervalo histórico já gravado.
 
 As datas dos retornos são mantidas por triggers e não podem ser inseridas ou
-apagadas diretamente pela Data API. A conta do salão pode editar apenas o
-estado e os campos de contato de um retorno.
+apagadas diretamente pela Data API. A conta do salão pode editar diretamente
+apenas o `status`; `contacted_at` e `contact_note` são gravados exclusivamente
+pela RPC `mark_return_contacted`.
+
+Atendimentos novos e seus itens são criados exclusivamente pela RPC
+`create_appointment_with_services`. A Data API permite consultar ambos e
+corrigir somente `performed_on` e `notes` em um atendimento existente. Não há
+INSERT ou DELETE direto em `appointments`, nem escrita direta em
+`appointment_services`; assim, cliente e serviços ativos, atomicidade e
+snapshots históricos são invariantes impostas pelo banco.
 
 ### Conta única e RLS
 
@@ -128,29 +136,33 @@ npm.cmd exec -- supabase migration new nome_descritivo
 
 ## Validação local executada
 
-Em 2 de setembro de 2026, com Supabase CLI `2.116.0` e PostgreSQL local 17:
+Em 3 de setembro de 2026, com Supabase CLI `2.116.0` e PostgreSQL local 17:
 
-- a migration `20260903002433` foi primeiro aplicada incrementalmente sobre a
-  base anterior; depois de confirmar zero registros de negócio, as duas
-  migrations foram reaplicadas do zero e listadas no banco local;
-- `supabase test db --local` aprovou 2 arquivos e 58 testes pgTAP;
+- as três migrations, incluindo o hardening `20260903155650`, foram aplicadas
+  do zero por `supabase db reset --local --no-seed`;
+- `supabase test db --local` aprovou 3 arquivos e 102 testes pgTAP;
 - `supabase db lint` não encontrou erros nos schemas `public` e
   `agenda_salao_private`;
 - os advisors locais de segurança e desempenho não encontraram problemas;
-- `database.types.ts` foi gerado novamente por introspecção do banco aprovado.
+- `database.types.ts` não precisou ser alterado, pois as assinaturas públicas
+  das RPCs foram preservadas e as novas implementações ficam no schema privado.
 
 Os testes exercitam conta autorizada, bloqueio de outra conta autenticada,
 bloqueio anônimo, meses de calendário (inclusive fim do mês e ano bissexto),
 vários serviços por atendimento, rollback integral após falha em um item,
 validação das entradas, horário de contato gerado pelo banco, idempotência do
-contato, preservação do status e preservação do intervalo histórico.
+contato, preservação do status, preservação do intervalo histórico, privilégios
+mínimos, bloqueio de escrita direta e proteção dos snapshots.
 
 ## Operações para o frontend
 
-As duas operações são funções `SECURITY INVOKER` no schema `public`, executáveis
-somente por `authenticated`. Além do privilégio de execução, as funções exigem
-que `auth.uid()` pertença a `agenda_salao_private.salon_users` e continuam
-sujeitas às policies RLS das tabelas.
+As duas operações mantêm wrappers `SECURITY INVOKER` no schema `public`, com as
+assinaturas originais e execução concedida somente a `authenticated`. A escrita
+é delegada a implementações `SECURITY DEFINER` em `agenda_salao_private`, schema
+que não é exposto pela Data API. Essas implementações usam `search_path = ''`,
+nomes totalmente qualificados e verificam explicitamente que `auth.uid()`
+pertença a `agenda_salao_private.salon_users` antes de usar os privilégios do
+proprietário. As tabelas públicas continuam com RLS habilitada.
 
 ### Registrar atendimento com serviços
 
@@ -227,9 +239,11 @@ agenda-salao/
     ├── config.toml
     ├── migrations/
     │   ├── 20260902201226_initial_backend.sql
-    │   └── 20260903002433_backend_api_operations.sql
+    │   ├── 20260903002433_backend_api_operations.sql
+    │   └── 20260903155650_harden_business_operations.sql
     └── tests/
         ├── backend_api_operations.test.sql
+        ├── business_operation_hardening.test.sql
         └── initial_backend.test.sql
 ```
 
