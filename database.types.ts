@@ -217,6 +217,29 @@ export type Database = {
         Args: { base_date: string; month_count: number }
         Returns: string
       }
+      create_appointment_with_services: {
+        Args: {
+          p_client_id: number
+          p_notes?: string
+          p_performed_on: string
+          p_service_ids: number[]
+        }
+        Returns: {
+          appointment_client_id: number
+          appointment_id: number
+          appointment_performed_on: string
+          return_count: number
+          service_count: number
+        }[]
+      }
+      mark_return_contacted: {
+        Args: { p_note?: string; p_return_id: number }
+        Returns: {
+          contacted_at: string
+          return_id: number
+          status: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

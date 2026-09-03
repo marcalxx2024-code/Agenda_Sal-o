@@ -20,6 +20,10 @@ mantidos manualmente como uma segunda definição do schema.
   Contato, conclusão e cancelamento são estados manuais e independentes.
 - `pending_returns`: view segura para consultar retornos ainda pendentes com os
   dados necessários da cliente e do serviço.
+- `create_appointment_with_services`: RPC transacional para criar um atendimento
+  e todos os seus itens, reutilizando os triggers de snapshots e retornos.
+- `mark_return_contacted`: RPC idempotente que confirma o contato usando o
+  horário do banco sem concluir o retorno.
 
 O financeiro fica deliberadamente para a próxima etapa. Ainda não há regras de
 comissão, parcelamento, despesas ou fechamento de caixa.
@@ -126,8 +130,10 @@ npm.cmd exec -- supabase migration new nome_descritivo
 
 Em 2 de setembro de 2026, com Supabase CLI `2.116.0` e PostgreSQL local 17:
 
-- a migration `20260902201226` foi aplicada e listada no banco local;
-- `supabase test db --local` aprovou 1 arquivo e 23 testes pgTAP;
+- a migration `20260903002433` foi primeiro aplicada incrementalmente sobre a
+  base anterior; depois de confirmar zero registros de negócio, as duas
+  migrations foram reaplicadas do zero e listadas no banco local;
+- `supabase test db --local` aprovou 2 arquivos e 58 testes pgTAP;
 - `supabase db lint` não encontrou erros nos schemas `public` e
   `agenda_salao_private`;
 - os advisors locais de segurança e desempenho não encontraram problemas;
@@ -135,7 +141,60 @@ Em 2 de setembro de 2026, com Supabase CLI `2.116.0` e PostgreSQL local 17:
 
 Os testes exercitam conta autorizada, bloqueio de outra conta autenticada,
 bloqueio anônimo, meses de calendário (inclusive fim do mês e ano bissexto),
-vários serviços por atendimento e preservação do intervalo histórico.
+vários serviços por atendimento, rollback integral após falha em um item,
+validação das entradas, horário de contato gerado pelo banco, idempotência do
+contato, preservação do status e preservação do intervalo histórico.
+
+## Operações para o frontend
+
+As duas operações são funções `SECURITY INVOKER` no schema `public`, executáveis
+somente por `authenticated`. Além do privilégio de execução, as funções exigem
+que `auth.uid()` pertença a `agenda_salao_private.salon_users` e continuam
+sujeitas às policies RLS das tabelas.
+
+### Registrar atendimento com serviços
+
+Chame `create_appointment_with_services` por RPC com:
+
+- `p_client_id` (`bigint`): identificador de uma cliente existente e ativa;
+- `p_performed_on` (`date`): data em que o atendimento ocorreu;
+- `p_service_ids` (`bigint[]`): lista não vazia, sem nulos ou duplicatas, de
+  serviços existentes e ativos;
+- `p_notes` (`text`, opcional): observações do atendimento.
+
+A função valida todos os dados antes da inserção, bloqueia cliente e serviços
+na mesma transação e cria o atendimento e seus itens em uma única chamada. Os
+campos históricos não são aceitos como parâmetros: `service_name`, intervalo e
+data de retorno continuam sendo produzidos pelos triggers existentes. Qualquer
+erro desfaz atendimento, itens e retornos gerados pela chamada.
+
+O resultado contém uma linha com `appointment_id`, `appointment_client_id`,
+`appointment_performed_on`, `service_count` e `return_count`. Clientes Supabase
+podem usar `.single()` após `.rpc(...)` para consumir essa única linha.
+
+Erros esperados:
+
+- `22023`: parâmetro obrigatório ausente ou lista vazia, com nulo ou duplicata;
+- `23503`: cliente ou algum serviço não existe;
+- `55000`: cliente ou algum serviço está inativo;
+- `42501`: sessão ausente ou conta autenticada sem autorização do salão.
+
+### Confirmar contato de retorno
+
+Chame `mark_return_contacted` com `p_return_id` (`bigint`) e `p_note` (`text`,
+opcional). A primeira chamada grava `contacted_at` com `statement_timestamp()`
+do PostgreSQL e armazena a nota. Não há parâmetro de horário, portanto o
+frontend não pode fornecer um timestamp arbitrário.
+
+A operação não altera `status`: um retorno `pending` continua pendente até uma
+ação explícita de conclusão ou cancelamento. Abrir o WhatsApp não deve chamar
+essa RPC; ela deve ser executada apenas depois da confirmação humana de que o
+contato ocorreu.
+
+Chamadas repetidas são idempotentes: retornam e preservam o primeiro horário, a
+primeira nota e o status atual. Um identificador inexistente produz `P0002`;
+identificador nulo produz `22023`; falta de autorização produz `42501`.
+O resultado contém uma linha com `return_id`, `contacted_at` e `status`.
 
 ## Aplicar em um projeto hospedado
 
@@ -159,6 +218,7 @@ Performance). Nunca versione senha, token, chave secreta ou `service_role`.
 ```text
 agenda-salao/
 ├── .gitignore
+├── INCIDENTS.md
 ├── database.types.ts
 ├── package-lock.json
 ├── package.json
@@ -166,15 +226,17 @@ agenda-salao/
 └── supabase/
     ├── config.toml
     ├── migrations/
-    │   └── 20260902201226_initial_backend.sql
+    │   ├── 20260902201226_initial_backend.sql
+    │   └── 20260903002433_backend_api_operations.sql
     └── tests/
+        ├── backend_api_operations.test.sql
         └── initial_backend.test.sql
 ```
 
 ## Próxima etapa sugerida
 
-O próximo passo do backend é definir e testar as operações de cadastro e
-consulta que serão consumidas no futuro. Antes de qualquer publicação, ainda é
-necessário confirmar explicitamente qual projeto Supabase remoto pertence a
-esta aplicação. As regras financeiras devem ser levantadas antes de qualquer
-tabela financeira ser criada.
+O próximo passo é integrar essas operações ao futuro frontend e definir a
+experiência de autenticação da conta do salão. Antes de qualquer publicação,
+ainda é necessário confirmar explicitamente qual projeto Supabase remoto
+pertence a esta aplicação. As regras financeiras continuam fora deste escopo e
+devem ser levantadas antes de qualquer tabela financeira ser criada.
