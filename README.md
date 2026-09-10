@@ -24,6 +24,10 @@ mantidos manualmente como uma segunda definição do schema.
   e todos os seus itens, reutilizando os triggers de snapshots e retornos.
 - `mark_return_contacted`: RPC idempotente que confirma o contato usando o
   horário do banco sem concluir o retorno.
+- `bookings` e `booking_services`: agenda futura e snapshots do plano,
+  separados do histórico do atendimento efetivamente realizado.
+- `complete_booking`: conclui um agendamento e cria seu atendimento vinculado
+  pela mesma regra transacional usada nos atendimentos avulsos.
 
 O financeiro fica deliberadamente para a próxima etapa. Ainda não há regras de
 comissão, parcelamento, despesas ou fechamento de caixa.
@@ -100,8 +104,10 @@ npm.cmd run db:test
 ```
 
 Na primeira execução, `db:start` baixa as imagens oficiais, cria a stack local e
-aplica as migrations. Os testes pgTAP rodam em transação e usam somente nomes,
-telefones, e-mails e UUIDs fictícios; no fim executam `rollback`.
+aplica as migrations. Os testes pgTAP usam somente nomes, telefones, e-mails e
+UUIDs fictícios. A suíte comum roda em transação e termina com `rollback`; o
+teste de concorrência usa duas conexões independentes e remove explicitamente
+todas as suas fixtures.
 
 ### Reaplicar migrations com segurança
 
@@ -136,16 +142,16 @@ npm.cmd exec -- supabase migration new nome_descritivo
 
 ## Validação local executada
 
-Em 3 de setembro de 2026, com Supabase CLI `2.116.0` e PostgreSQL local 17:
+Em 10 de setembro de 2026, com Supabase CLI `2.116.0` e PostgreSQL local 17:
 
-- as três migrations, incluindo o hardening `20260903155650`, foram aplicadas
-  do zero por `supabase db reset --local --no-seed`;
-- `supabase test db --local` aprovou 3 arquivos e 102 testes pgTAP;
+- as sete migrations, incluindo `20260910213811_complete_booking`, foram
+  aplicadas do zero por `supabase db reset`;
+- `supabase test db --local` aprovou 8 arquivos e 352 testes pgTAP;
 - `supabase db lint` não encontrou erros nos schemas `public` e
   `agenda_salao_private`;
 - os advisors locais de segurança e desempenho não encontraram problemas;
-- `database.types.ts` não precisou ser alterado, pois as assinaturas públicas
-  das RPCs foram preservadas e as novas implementações ficam no schema privado.
+- `database.types.ts` foi regenerado e inclui o contrato público de
+  `complete_booking`.
 
 Os testes exercitam conta autorizada, bloqueio de outra conta autenticada,
 bloqueio anônimo, meses de calendário (inclusive fim do mês e ano bissexto),
@@ -153,6 +159,9 @@ vários serviços por atendimento, rollback integral após falha em um item,
 validação das entradas, horário de contato gerado pelo banco, idempotência do
 contato, preservação do status, preservação do intervalo histórico, privilégios
 mínimos, bloqueio de escrita direta e proteção dos snapshots.
+Os testes da conclusão também cobrem divergência entre serviços planejados e
+realizados, idempotência, concorrência real em duas conexões e rollback em
+falhas de appointments, appointment_services e returns.
 
 ## Operações para o frontend
 
@@ -243,8 +252,29 @@ e `updated_at`.
 
 Repetir a mesma transição é idempotente e preserva os timestamps. Estados
 terminais não podem ser convertidos para outro estado. Essas operações não
-criam atendimentos realizados nem retornos; essa integração pertence à etapa de
-conclusão do booking.
+criam atendimentos realizados nem retornos.
+
+### Concluir um agendamento
+
+`complete_booking` recebe `p_booking_id` (`bigint`), `p_performed_on`
+(`date`), `p_service_ids` (`bigint[]`) e `p_notes` (`text`, opcional).
+O cliente vem do booking e não pode ser enviado pelo frontend. A data realizada
+é independente de `starts_at`, que permanece como histórico do plano.
+
+A lista informada representa os serviços efetivamente realizados e pode ser
+diferente do plano. Serviços ativos podem ser adicionados; um serviço inativo
+só é aceito se já constar em `booking_services`. A operação cria
+`appointments` e `appointment_services` pela mesma implementação interna da
+RPC avulsa, permitindo que os triggers existentes produzam snapshots e returns.
+Nenhum return é criado diretamente por `complete_booking`.
+
+O resultado contém `booking_id`, `appointment_id`, `booking_status`,
+`performed_on` e `service_count`. Bookings `scheduled` ou `confirmed`
+podem ser concluídos. Uma repetição sobre um booking `completed` consistente
+retorna o vínculo já existente sem criar novos registros; `cancelled` e
+`no_show` são rejeitados. O lock `FOR UPDATE` e a unicidade de
+`appointments.booking_id` garantem no máximo um atendimento por booking mesmo
+com requisições concorrentes.
 
 ## Aplicar em um projeto hospedado
 

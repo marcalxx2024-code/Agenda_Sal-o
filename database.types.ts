@@ -332,6 +332,21 @@ export type Database = {
           updated_at: string
         }[]
       }
+      complete_booking: {
+        Args: {
+          p_booking_id: number
+          p_notes?: string
+          p_performed_on: string
+          p_service_ids: number[]
+        }
+        Returns: {
+          appointment_id: number
+          booking_id: number
+          booking_status: string
+          performed_on: string
+          service_count: number
+        }[]
+      }
       confirm_booking: {
         Args: { p_booking_id: number }
         Returns: {
