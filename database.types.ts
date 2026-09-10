@@ -171,6 +171,7 @@ export type Database = {
         Row: {
           active: boolean
           created_at: string
+          estimated_duration_minutes: number | null
           id: number
           name: string
           suggested_return_months: number | null
@@ -179,6 +180,7 @@ export type Database = {
         Insert: {
           active?: boolean
           created_at?: string
+          estimated_duration_minutes?: number | null
           id?: never
           name: string
           suggested_return_months?: number | null
@@ -187,6 +189,7 @@ export type Database = {
         Update: {
           active?: boolean
           created_at?: string
+          estimated_duration_minutes?: number | null
           id?: never
           name?: string
           suggested_return_months?: number | null
