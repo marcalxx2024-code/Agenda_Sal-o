@@ -156,8 +156,8 @@ mínimos, bloqueio de escrita direta e proteção dos snapshots.
 
 ## Operações para o frontend
 
-As duas operações mantêm wrappers `SECURITY INVOKER` no schema `public`, com as
-assinaturas originais e execução concedida somente a `authenticated`. A escrita
+As operações críticas mantêm wrappers `SECURITY INVOKER` no schema `public`, com
+execução concedida somente a `authenticated`. A escrita
 é delegada a implementações `SECURITY DEFINER` em `agenda_salao_private`, schema
 que não é exposto pela Data API. Essas implementações usam `search_path = ''`,
 nomes totalmente qualificados e verificam explicitamente que `auth.uid()`
@@ -207,6 +207,44 @@ Chamadas repetidas são idempotentes: retornam e preservam o primeiro horário, 
 primeira nota e o status atual. Um identificador inexistente produz `P0002`;
 identificador nulo produz `22023`; falta de autorização produz `42501`.
 O resultado contém uma linha com `return_id`, `contacted_at` e `status`.
+
+### Criar e editar agendamentos futuros
+
+`create_booking` recebe `p_client_id` (`bigint`), `p_starts_at` (`timestamptz`),
+`p_service_ids` (`bigint[]`), `p_duration_minutes` (`integer`, opcional) e
+`p_notes` (`text`, opcional). A operação exige cliente e serviços ativos,
+duração estimada configurada em todos os serviços e horário futuro. Sem duração
+manual, `ends_at` é calculado pela soma das durações dos serviços; com duração
+manual, o valor positivo informado define o intervalo total reservado.
+
+`update_booking` recebe primeiro `p_booking_id` e depois os mesmos dados
+editáveis. A edição substitui exatamente o plano de serviços, regenera os
+snapshots a partir do catálogo atual, recalcula `ends_at` e só aceita bookings
+em `scheduled` ou `confirmed`. O status e `status_updated_at` são preservados.
+
+Ambas retornam uma linha com `booking_id`, `booking_client_id`,
+`booking_starts_at`, `booking_ends_at`, `booking_status` e `service_count`. A
+exclusion constraint continua sendo a garantia definitiva contra sobreposição;
+conflitos são expostos com SQLSTATE `23P01` e a mensagem
+`booking time conflicts with another active booking`. Qualquer falha desfaz o
+booking e seus snapshots na mesma transação.
+
+### Alterar estado de um agendamento
+
+As RPCs `confirm_booking`, `cancel_booking` e `mark_booking_no_show` recebem
+somente `p_booking_id`. Elas bloqueiam a linha durante a transição, usam o
+horário do banco e retornam `booking_id`, `booking_status`, `status_updated_at`
+e `updated_at`.
+
+- `confirm_booking`: `scheduled` para `confirmed`;
+- `cancel_booking`: `scheduled` ou `confirmed` para `cancelled`;
+- `mark_booking_no_show`: `scheduled` ou `confirmed` para `no_show`, somente
+  quando `starts_at` já foi alcançado.
+
+Repetir a mesma transição é idempotente e preserva os timestamps. Estados
+terminais não podem ser convertidos para outro estado. Essas operações não
+criam atendimentos realizados nem retornos; essa integração pertence à etapa de
+conclusão do booking.
 
 ## Aplicar em um projeto hospedado
 

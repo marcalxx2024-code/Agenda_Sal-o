@@ -323,6 +323,24 @@ export type Database = {
         Args: { base_date: string; month_count: number }
         Returns: string
       }
+      cancel_booking: {
+        Args: { p_booking_id: number }
+        Returns: {
+          booking_id: number
+          booking_status: string
+          status_updated_at: string
+          updated_at: string
+        }[]
+      }
+      confirm_booking: {
+        Args: { p_booking_id: number }
+        Returns: {
+          booking_id: number
+          booking_status: string
+          status_updated_at: string
+          updated_at: string
+        }[]
+      }
       create_appointment_with_services: {
         Args: {
           p_client_id: number
@@ -338,12 +356,56 @@ export type Database = {
           service_count: number
         }[]
       }
+      create_booking: {
+        Args: {
+          p_client_id: number
+          p_duration_minutes?: number
+          p_notes?: string
+          p_service_ids: number[]
+          p_starts_at: string
+        }
+        Returns: {
+          booking_client_id: number
+          booking_ends_at: string
+          booking_id: number
+          booking_starts_at: string
+          booking_status: string
+          service_count: number
+        }[]
+      }
+      mark_booking_no_show: {
+        Args: { p_booking_id: number }
+        Returns: {
+          booking_id: number
+          booking_status: string
+          status_updated_at: string
+          updated_at: string
+        }[]
+      }
       mark_return_contacted: {
         Args: { p_note?: string; p_return_id: number }
         Returns: {
           contacted_at: string
           return_id: number
           status: string
+        }[]
+      }
+      update_booking: {
+        Args: {
+          p_booking_id: number
+          p_client_id: number
+          p_duration_minutes?: number
+          p_notes?: string
+          p_service_ids: number[]
+          p_starts_at: string
+        }
+        Returns: {
+          booking_client_id: number
+          booking_ends_at: string
+          booking_id: number
+          booking_starts_at: string
+          booking_status: string
+          service_count: number
         }[]
       }
     }
