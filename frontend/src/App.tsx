@@ -1,0 +1,69 @@
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { AppShell } from './components/AppShell'
+import { ProtectedRoute, PublicOnlyRoute } from './components/RouteGuards'
+import { AuthProvider } from './hooks/AuthProvider'
+import { DashboardPage } from './pages/DashboardPage'
+import { LoginPage } from './pages/LoginPage'
+import { PlaceholderPage } from './pages/PlaceholderPage'
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route element={<PublicOnlyRoute />}>
+            <Route path="/login" element={<LoginPage />} />
+          </Route>
+
+          <Route element={<ProtectedRoute />}>
+            <Route element={<AppShell />}>
+              <Route index element={<DashboardPage />} />
+              <Route
+                path="agenda"
+                element={
+                  <PlaceholderPage
+                    title="Agenda"
+                    description="A visão diária e semanal dos agendamentos será construída aqui."
+                    icon="calendar"
+                  />
+                }
+              />
+              <Route
+                path="clientes"
+                element={
+                  <PlaceholderPage
+                    title="Clientes"
+                    description="Cadastro, histórico e próximos cuidados de cada cliente ficarão aqui."
+                    icon="clients"
+                  />
+                }
+              />
+              <Route
+                path="servicos"
+                element={
+                  <PlaceholderPage
+                    title="Serviços"
+                    description="O catálogo de procedimentos, durações e retornos será gerenciado aqui."
+                    icon="services"
+                  />
+                }
+              />
+              <Route
+                path="retornos"
+                element={
+                  <PlaceholderPage
+                    title="Retornos"
+                    description="Os avisos para contato e o acompanhamento dos retornos ficarão aqui."
+                    icon="returns"
+                  />
+                }
+              />
+            </Route>
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  )
+}

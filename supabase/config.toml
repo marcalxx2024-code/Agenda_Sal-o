@@ -10,11 +10,13 @@ major_version = 17
 
 [auth]
 enabled = true
+enable_signup = false
 site_url = "http://127.0.0.1:3000"
 additional_redirect_urls = ["http://127.0.0.1:3000"]
 
 [auth.email]
-# A conta deve ser criada administrativamente; não há cadastro público.
-enable_signup = false
+# O provedor permite login por e-mail; o bloqueio global acima impede cadastro
+# público. Contas continuam sendo criadas somente pela administração.
+enable_signup = true
 double_confirm_changes = true
 enable_confirmations = false
