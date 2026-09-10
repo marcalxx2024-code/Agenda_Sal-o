@@ -56,6 +56,7 @@ export type Database = {
       }
       appointments: {
         Row: {
+          booking_id: number | null
           client_id: number
           created_at: string
           id: number
@@ -64,6 +65,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          booking_id?: number | null
           client_id: number
           created_at?: string
           id?: never
@@ -72,6 +74,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          booking_id?: number | null
           client_id?: number
           created_at?: string
           id?: never
@@ -81,6 +84,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "appointments_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: true
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "appointments_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
@@ -89,6 +99,99 @@ export type Database = {
           },
           {
             foreignKeyName: "appointments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "pending_returns"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      booking_services: {
+        Row: {
+          booking_id: number
+          created_at: string
+          estimated_duration_minutes: number
+          id: number
+          service_id: number
+          service_name: string
+        }
+        Insert: {
+          booking_id: number
+          created_at?: string
+          estimated_duration_minutes: number
+          id?: never
+          service_id: number
+          service_name: string
+        }
+        Update: {
+          booking_id?: number
+          created_at?: string
+          estimated_duration_minutes?: number
+          id?: never
+          service_id?: number
+          service_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_services_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_services_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bookings: {
+        Row: {
+          client_id: number
+          created_at: string
+          ends_at: string
+          id: number
+          notes: string | null
+          starts_at: string
+          status: string
+          status_updated_at: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: number
+          created_at?: string
+          ends_at: string
+          id?: never
+          notes?: string | null
+          starts_at: string
+          status?: string
+          status_updated_at?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: number
+          created_at?: string
+          ends_at?: string
+          id?: never
+          notes?: string | null
+          starts_at?: string
+          status?: string
+          status_updated_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "pending_returns"
