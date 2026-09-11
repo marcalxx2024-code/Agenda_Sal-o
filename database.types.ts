@@ -388,6 +388,7 @@ export type Database = {
           service_count: number
         }[]
       }
+      has_salon_access: { Args: never; Returns: boolean }
       mark_booking_no_show: {
         Args: { p_booking_id: number }
         Returns: {

@@ -5,6 +5,7 @@ import {
   AuthContext,
   type AuthActionResult,
   type AuthContextValue,
+  type AuthorizationStatus,
 } from './auth-context'
 
 interface AuthProviderProps {
@@ -26,17 +27,29 @@ function friendlyAuthError(message: string): string {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<Session | null>(null)
   const [isRestoringSession, setIsRestoringSession] = useState(true)
+  const [authorizationStatus, setAuthorizationStatus] =
+    useState<AuthorizationStatus>('idle')
+  const [authorizationError, setAuthorizationError] = useState<string | null>(
+    null,
+  )
+  const [authorizationAttempt, setAuthorizationAttempt] = useState(0)
 
   useEffect(() => {
     let isMounted = true
+
+    function applySession(nextSession: Session | null) {
+      setSession(nextSession)
+      setAuthorizationStatus(nextSession ? 'loading' : 'idle')
+      setAuthorizationError(null)
+    }
 
     void supabase.auth.getSession().then(({ data, error }) => {
       if (!isMounted) return
 
       if (error) {
-        setSession(null)
+        applySession(null)
       } else {
-        setSession(data.session)
+        applySession(data.session)
       }
       setIsRestoringSession(false)
     })
@@ -45,7 +58,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!isMounted) return
-      setSession(nextSession)
+      applySession(nextSession)
       setIsRestoringSession(false)
     })
 
@@ -55,10 +68,43 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [])
 
+  useEffect(() => {
+    if (isRestoringSession || !session) return
+
+    let isCurrent = true
+
+    void supabase
+      .rpc('has_salon_access')
+      .then(({ data, error }) => {
+        if (!isCurrent) return
+
+        if (!error && typeof data === 'boolean') {
+          setAuthorizationStatus(data ? 'authorized' : 'unauthorized')
+          return
+        }
+
+        setAuthorizationStatus('error')
+        setAuthorizationError(
+          'Não foi possível verificar seu acesso. Tente novamente.',
+        )
+      })
+
+    return () => {
+      isCurrent = false
+    }
+  }, [authorizationAttempt, isRestoringSession, session])
+
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
       isRestoringSession,
+      authorizationStatus,
+      authorizationError,
+      retryAuthorization() {
+        setAuthorizationStatus('loading')
+        setAuthorizationError(null)
+        setAuthorizationAttempt((attempt) => attempt + 1)
+      },
       async signIn(email: string, password: string): Promise<AuthActionResult> {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -77,7 +123,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       },
     }),
-    [isRestoringSession, session],
+    [authorizationError, authorizationStatus, isRestoringSession, session],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
