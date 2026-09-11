@@ -822,19 +822,22 @@ a {
 
 /* Clients */
 
-.clients-page {
+.clients-page,
+.services-page {
   display: grid;
   gap: 26px;
 }
 
-.clients-page__heading {
+.clients-page__heading,
+.services-page__heading {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
 }
 
-.clients-page__heading h2 {
+.clients-page__heading h2,
+.services-page__heading h2 {
   margin: 10px 0 8px;
   font-family: Georgia, "Times New Roman", serif;
   font-size: clamp(34px, 4vw, 46px);
@@ -843,7 +846,8 @@ a {
   line-height: 1.08;
 }
 
-.clients-page__heading p {
+.clients-page__heading p,
+.services-page__heading p {
   margin: 0;
   color: var(--ink-soft);
   line-height: 1.6;
@@ -877,7 +881,8 @@ a {
   line-height: 1.5;
 }
 
-.clients-toolbar {
+.clients-toolbar,
+.services-toolbar {
   display: grid;
   padding: 20px;
   border: 1px solid var(--line);
@@ -886,18 +891,21 @@ a {
   gap: 9px;
 }
 
-.clients-toolbar label {
+.clients-toolbar label,
+.services-toolbar label {
   font-size: 12px;
   font-weight: 750;
 }
 
-.clients-search-row {
+.clients-search-row,
+.services-search-row {
   display: flex;
   align-items: center;
   gap: 18px;
 }
 
-.clients-search-row input {
+.clients-search-row input,
+.services-search-row input {
   width: min(100%, 520px);
   height: 46px;
   padding: 0 14px;
@@ -907,25 +915,29 @@ a {
   background: var(--paper);
 }
 
-.clients-search-row input:focus {
+.clients-search-row input:focus,
+.services-search-row input:focus {
   border-color: var(--rose);
   outline: none;
   box-shadow: 0 0 0 4px rgba(155, 107, 111, 0.12);
 }
 
-.clients-search-row input:disabled {
+.clients-search-row input:disabled,
+.services-search-row input:disabled {
   cursor: default;
   opacity: 0.62;
 }
 
-.clients-result-count {
+.clients-result-count,
+.services-result-count {
   margin-left: auto;
   color: var(--ink-soft);
   font-size: 12px;
   white-space: nowrap;
 }
 
-.clients-state {
+.clients-state,
+.services-state {
   display: grid;
   min-height: 300px;
   padding: 40px 24px;
@@ -937,21 +949,24 @@ a {
   background: rgba(255, 253, 249, 0.54);
 }
 
-.clients-state h3 {
+.clients-state h3,
+.services-state h3 {
   margin: 13px 0 8px;
   font-family: Georgia, "Times New Roman", serif;
   font-size: 27px;
   font-weight: 400;
 }
 
-.clients-state p {
+.clients-state p,
+.services-state p {
   max-width: 430px;
   margin: 0;
   color: var(--ink-soft);
   line-height: 1.6;
 }
 
-.clients-state__pulse {
+.clients-state__pulse,
+.services-state__pulse {
   width: 15px;
   height: 15px;
   margin-bottom: 2px;
@@ -960,12 +975,14 @@ a {
   animation: loader-pulse 1.4s ease-in-out infinite;
 }
 
-.clients-state__button {
+.clients-state__button,
+.services-state__button {
   margin-top: 24px;
   padding: 0 22px;
 }
 
-.clients-clear-search {
+.clients-clear-search,
+.services-clear-search {
   margin-top: 22px;
   padding: 8px 2px;
   border: 0;
@@ -975,12 +992,14 @@ a {
   font-weight: 750;
 }
 
-.clients-clear-search:hover {
+.clients-clear-search:hover,
+.services-clear-search:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.clients-list {
+.clients-list,
+.services-list {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -1007,7 +1026,8 @@ a {
   text-transform: uppercase;
 }
 
-.clients-list ul {
+.clients-list ul,
+.services-list ul {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1276,6 +1296,78 @@ a {
   background: var(--paper);
 }
 
+/* Services */
+
+.services-list__header,
+.service-row {
+  display: grid;
+  grid-template-columns: minmax(210px, 1fr) minmax(150px, 0.5fr) minmax(180px, 0.6fr) 86px;
+  align-items: center;
+  gap: 24px;
+}
+
+.services-list__header {
+  min-height: 43px;
+  padding: 0 22px;
+  color: #8b8079;
+  background: #f7f1ea;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.service-row {
+  min-height: 78px;
+  padding: 16px 22px;
+}
+
+.service-row + .service-row {
+  border-top: 1px solid #eee6de;
+}
+
+.service-row__name {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-detail {
+  color: #625954;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.service-detail__label {
+  display: none;
+}
+
+.service-detail--missing {
+  color: #8b8079;
+  font-style: italic;
+}
+
+.service-status {
+  justify-self: start;
+  padding: 6px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.service-status--active {
+  color: #566047;
+  background: var(--olive-soft);
+}
+
+.service-status--inactive {
+  color: #7c6f68;
+  background: #eee8e2;
+}
+
 /* Placeholder routes */
 
 .placeholder-page {
@@ -1489,11 +1581,13 @@ a {
     padding: 27px 18px 104px;
   }
 
-  .clients-page {
+  .clients-page,
+  .services-page {
     gap: 22px;
   }
 
-  .clients-page__heading {
+  .clients-page__heading,
+  .services-page__heading {
     align-items: flex-start;
     flex-direction: column;
     gap: 20px;
@@ -1503,26 +1597,31 @@ a {
     width: 100%;
   }
 
-  .clients-search-row {
+  .clients-search-row,
+  .services-search-row {
     align-items: stretch;
     flex-direction: column;
     gap: 9px;
   }
 
-  .clients-search-row input {
+  .clients-search-row input,
+  .services-search-row input {
     width: 100%;
   }
 
-  .clients-result-count {
+  .clients-result-count,
+  .services-result-count {
     min-height: 18px;
     margin-left: 0;
   }
 
-  .clients-state {
+  .clients-state,
+  .services-state {
     min-height: 280px;
   }
 
-  .clients-list__header {
+  .clients-list__header,
+  .services-list__header {
     display: none;
   }
 
@@ -1565,6 +1664,31 @@ a {
   .client-form__cancel,
   .client-form__submit {
     width: 100%;
+  }
+
+  .service-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 16px;
+  }
+
+  .service-row__name {
+    grid-column: 1 / -1;
+  }
+
+  .service-status {
+    grid-row: 3;
+    grid-column: 1 / -1;
+  }
+
+  .service-detail__label {
+    display: block;
+    margin-bottom: 4px;
+    color: #968b84;
+    font-size: 9px;
+    font-style: normal;
+    font-weight: 750;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
 
   .dashboard-page {

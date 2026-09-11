@@ -6,6 +6,7 @@ import { ClientsPage } from './pages/ClientsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
+import { ServicesPage } from './pages/ServicesPage'
 
 export default function App() {
   return (
@@ -30,16 +31,7 @@ export default function App() {
                 }
               />
               <Route path="clientes" element={<ClientsPage />} />
-              <Route
-                path="servicos"
-                element={
-                  <PlaceholderPage
-                    title="Serviços"
-                    description="O catálogo de procedimentos, durações e retornos será gerenciado aqui."
-                    icon="services"
-                  />
-                }
-              />
+              <Route path="servicos" element={<ServicesPage />} />
               <Route
                 path="retornos"
                 element={
