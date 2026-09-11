@@ -8,6 +8,7 @@ import {
 import {
   createClient,
   listClients,
+  setClientActive,
   updateClient,
   type ClientFormInput,
   type ClientListItem,
@@ -331,6 +332,159 @@ function ClientDialog({ mode, onClose, onSaved }: ClientDialogProps) {
   )
 }
 
+type ClientActiveSubmissionState =
+  | { status: 'idle' }
+  | { status: 'submitting' }
+  | {
+      status: 'error'
+      kind: 'supabase' | 'unexpected'
+      message: string
+      cause: ClientsDataError | unknown
+    }
+
+interface ClientActiveDialogProps {
+  client: ClientListItem
+  onClose: () => void
+  onUpdated: (client: ClientListItem) => void
+}
+
+function friendlyActiveError(error: ClientsDataError) {
+  if (error.code === '42501') {
+    return 'Sua conta não possui permissão para alterar o status de clientes.'
+  }
+
+  return 'Não foi possível alterar o status do cliente. Tente novamente.'
+}
+
+function ClientActiveDialog({
+  client,
+  onClose,
+  onUpdated,
+}: ClientActiveDialogProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const [submission, setSubmission] = useState<ClientActiveSubmissionState>({
+    status: 'idle',
+  })
+  const isSubmitting = submission.status === 'submitting'
+  const isReactivating = !client.active
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (dialog && !dialog.open) dialog.showModal()
+  }, [])
+
+  function closeDialog() {
+    if (!isSubmitting) dialogRef.current?.close()
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (isSubmitting) return
+
+    setSubmission({ status: 'submitting' })
+
+    try {
+      const result = await setClientActive(client.id, isReactivating)
+
+      if (result.error) {
+        setSubmission({
+          status: 'error',
+          kind: 'supabase',
+          message: friendlyActiveError(result.error),
+          cause: result.error,
+        })
+        return
+      }
+
+      onUpdated(result.data)
+    } catch (error) {
+      setSubmission({
+        status: 'error',
+        kind: 'unexpected',
+        message: 'Ocorreu uma falha inesperada. Tente novamente.',
+        cause: error,
+      })
+    }
+  }
+
+  return (
+    <dialog
+      className="client-dialog client-active-dialog"
+      ref={dialogRef}
+      aria-labelledby="client-active-title"
+      aria-describedby="client-active-description"
+      onClose={onClose}
+      onCancel={(event) => {
+        if (isSubmitting) event.preventDefault()
+      }}
+    >
+      <form className="client-form" onSubmit={handleSubmit}>
+        <header className="client-dialog__header">
+          <div>
+            <span className="eyebrow">Status do cliente</span>
+            <h2 id="client-active-title">
+              {isReactivating ? 'Reativar cliente?' : 'Inativar cliente?'}
+            </h2>
+            <p>{client.name}</p>
+          </div>
+          <button
+            className="client-dialog__close"
+            type="button"
+            aria-label={
+              isReactivating ? 'Fechar reativação' : 'Fechar inativação'
+            }
+            onClick={closeDialog}
+            disabled={isSubmitting}
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="client-active-dialog__body">
+          {isReactivating ? (
+            <p id="client-active-description">
+              O cliente voltará a aparecer com o status ativo.
+            </p>
+          ) : (
+            <p id="client-active-description">
+              O cliente ficará inativo, mas todo o histórico será preservado. Ele
+              poderá ser reativado depois.
+            </p>
+          )}
+        </div>
+
+        {submission.status === 'error' && (
+          <p className="client-form__submit-error" role="alert">
+            {submission.message}
+          </p>
+        )}
+
+        <footer className="client-form__actions">
+          <button
+            className="client-form__cancel"
+            type="button"
+            onClick={closeDialog}
+            disabled={isSubmitting}
+          >
+            Cancelar
+          </button>
+          <button
+            className="primary-button client-form__submit"
+            type="submit"
+            disabled={isSubmitting}
+          >
+            {isSubmitting
+              ? 'Processando…'
+              : isReactivating
+                ? 'Reativar cliente'
+                : 'Inativar cliente'}
+          </button>
+        </footer>
+      </form>
+    </dialog>
+  )
+}
+
 export function ClientsPage() {
   const [loadState, setLoadState] = useState<ClientsLoadState>({
     status: 'loading',
@@ -338,6 +492,8 @@ export function ClientsPage() {
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [search, setSearch] = useState('')
   const [clientForm, setClientForm] = useState<ClientFormMode | null>(null)
+  const [activeActionClient, setActiveActionClient] =
+    useState<ClientListItem | null>(null)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
 
   useEffect(() => {
@@ -396,6 +552,20 @@ export function ClientsPage() {
       action === 'edit'
         ? `${client.name} foi atualizado com sucesso.`
         : `${client.name} foi cadastrado com sucesso.`,
+    )
+    setLoadState({ status: 'loading' })
+    setLoadAttempt((attempt) => attempt + 1)
+  }
+
+  function openActiveDialog(client: ClientListItem) {
+    setSaveSuccess(null)
+    setActiveActionClient(client)
+  }
+
+  function handleClientActiveUpdated(client: ClientListItem) {
+    setActiveActionClient(null)
+    setSaveSuccess(
+      `${client.name} foi ${client.active ? 'reativado' : 'inativado'} com sucesso.`,
     )
     setLoadState({ status: 'loading' })
     setLoadAttempt((attempt) => attempt + 1)
@@ -519,14 +689,28 @@ export function ClientsPage() {
                   >
                     {client.active ? 'Ativo' : 'Inativo'}
                   </span>
-                  <button
-                    className="client-row__edit"
-                    type="button"
-                    aria-label={`Editar ${client.name}`}
-                    onClick={() => openEditDialog(client)}
+                  <div
+                    className="client-row__actions"
+                    role="group"
+                    aria-label={`Ações para ${client.name}`}
                   >
-                    Editar
-                  </button>
+                    <button
+                      className="client-row__action"
+                      type="button"
+                      aria-label={`Editar ${client.name}`}
+                      onClick={() => openEditDialog(client)}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      className="client-row__action"
+                      type="button"
+                      aria-label={`${client.active ? 'Inativar' : 'Reativar'} ${client.name}`}
+                      onClick={() => openActiveDialog(client)}
+                    >
+                      {client.active ? 'Inativar' : 'Reativar'}
+                    </button>
+                  </div>
                 </li>
               )
             })}
@@ -544,6 +728,15 @@ export function ClientsPage() {
           mode={clientForm}
           onClose={() => setClientForm(null)}
           onSaved={handleClientSaved}
+        />
+      )}
+
+      {activeActionClient && (
+        <ClientActiveDialog
+          key={`${activeActionClient.id}-${activeActionClient.active}`}
+          client={activeActionClient}
+          onClose={() => setActiveActionClient(null)}
+          onUpdated={handleClientActiveUpdated}
         />
       )}
     </section>

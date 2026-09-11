@@ -991,7 +991,7 @@ a {
 .clients-list__header,
 .client-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.45fr) 86px 64px;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.45fr) 86px 128px;
   align-items: center;
   gap: 24px;
 }
@@ -1070,8 +1070,13 @@ a {
   background: #eee8e2;
 }
 
-.client-row__edit {
-  justify-self: start;
+.client-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.client-row__action {
   padding: 5px 0;
   border: 0;
   color: var(--rose-deep);
@@ -1080,7 +1085,7 @@ a {
   font-weight: 750;
 }
 
-.client-row__edit:hover {
+.client-row__action:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -1101,6 +1106,21 @@ a {
 .client-dialog::backdrop {
   background: rgba(48, 43, 40, 0.44);
   backdrop-filter: blur(3px);
+}
+
+.client-active-dialog {
+  width: min(calc(100% - 36px), 500px);
+}
+
+.client-active-dialog__body {
+  padding: 28px 32px;
+}
+
+.client-active-dialog__body p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.65;
 }
 
 .client-form {
@@ -1525,7 +1545,8 @@ a {
   }
 
   .client-dialog__header,
-  .client-form__fields {
+  .client-form__fields,
+  .client-active-dialog__body {
     padding-right: 22px;
     padding-left: 22px;
   }

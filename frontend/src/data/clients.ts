@@ -96,3 +96,21 @@ export async function updateClient(
 
   return { data, error: null }
 }
+
+export async function setClientActive(
+  id: ClientListItem['id'],
+  active: boolean,
+): Promise<ClientMutationResult> {
+  const { data, error } = await supabase
+    .from('clients')
+    .update({ active })
+    .eq('id', id)
+    .select('id, name, phone, notes, active')
+    .single()
+
+  if (error) {
+    return { data: null, error: toClientsDataError(error) }
+  }
+
+  return { data, error: null }
+}
