@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { ProtectedRoute, PublicOnlyRoute } from './components/RouteGuards'
 import { AuthProvider } from './hooks/AuthProvider'
+import { ClientsPage } from './pages/ClientsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
@@ -28,16 +29,7 @@ export default function App() {
                   />
                 }
               />
-              <Route
-                path="clientes"
-                element={
-                  <PlaceholderPage
-                    title="Clientes"
-                    description="Cadastro, histórico e próximos cuidados de cada cliente ficarão aqui."
-                    icon="clients"
-                  />
-                }
-              />
+              <Route path="clientes" element={<ClientsPage />} />
               <Route
                 path="servicos"
                 element={
