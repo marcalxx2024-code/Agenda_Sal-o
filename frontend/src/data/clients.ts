@@ -9,7 +9,7 @@ export type ClientListItem = Pick<
   'id' | 'name' | 'phone' | 'notes' | 'active'
 >
 
-export interface CreateClientInput {
+export interface ClientFormInput {
   name: string
   phone: string
   notes?: string | null
@@ -26,7 +26,7 @@ export type ListClientsResult =
   | { data: ClientListItem[]; error: null }
   | { data: null; error: ClientsDataError }
 
-export type CreateClientResult =
+export type ClientMutationResult =
   | { data: ClientListItem; error: null }
   | { data: null; error: ClientsDataError }
 
@@ -54,8 +54,8 @@ export async function listClients(): Promise<ListClientsResult> {
 }
 
 export async function createClient(
-  input: CreateClientInput,
-): Promise<CreateClientResult> {
+  input: ClientFormInput,
+): Promise<ClientMutationResult> {
   const notes = input.notes?.trim()
   const { data, error } = await supabase
     .from('clients')
@@ -64,6 +64,29 @@ export async function createClient(
       phone: input.phone.trim(),
       notes: notes || null,
     })
+    .select('id, name, phone, notes, active')
+    .single()
+
+  if (error) {
+    return { data: null, error: toClientsDataError(error) }
+  }
+
+  return { data, error: null }
+}
+
+export async function updateClient(
+  id: ClientListItem['id'],
+  input: ClientFormInput,
+): Promise<ClientMutationResult> {
+  const notes = input.notes?.trim()
+  const { data, error } = await supabase
+    .from('clients')
+    .update({
+      name: input.name.trim(),
+      phone: input.phone.trim(),
+      notes: notes || null,
+    })
+    .eq('id', id)
     .select('id, name, phone, notes, active')
     .single()
 

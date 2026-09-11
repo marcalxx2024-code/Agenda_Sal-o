@@ -8,9 +8,10 @@ import {
 import {
   createClient,
   listClients,
+  updateClient,
+  type ClientFormInput,
   type ClientListItem,
   type ClientsDataError,
-  type CreateClientInput,
 } from '../data/clients'
 
 type ClientsLoadState =
@@ -61,16 +62,21 @@ type ClientSubmissionState =
       cause: ClientsDataError | unknown
     }
 
-interface NewClientDialogProps {
+type ClientFormMode =
+  | { kind: 'create' }
+  | { kind: 'edit'; client: ClientListItem }
+
+interface ClientDialogProps {
+  mode: ClientFormMode
   onClose: () => void
-  onCreated: (client: ClientListItem) => void
+  onSaved: (client: ClientListItem) => void
 }
 
 function validateClientForm(
   name: string,
   phone: string,
   notes: string,
-): { input: CreateClientInput | null; errors: ClientFormErrors } {
+): { input: ClientFormInput | null; errors: ClientFormErrors } {
   const trimmedName = name.trim()
   const trimmedPhone = phone.trim()
   const trimmedNotes = notes.trim()
@@ -105,7 +111,10 @@ function validateClientForm(
   }
 }
 
-function friendlyCreateError(error: ClientsDataError) {
+function friendlySaveError(
+  error: ClientsDataError,
+  mode: ClientFormMode['kind'],
+) {
   const databaseMessage = `${error.message} ${error.details ?? ''}`
 
   if (error.code === '23514') {
@@ -121,17 +130,22 @@ function friendlyCreateError(error: ClientsDataError) {
   }
 
   if (error.code === '42501') {
-    return 'Sua conta não possui permissão para cadastrar clientes.'
+    return mode === 'edit'
+      ? 'Sua conta não possui permissão para editar clientes.'
+      : 'Sua conta não possui permissão para cadastrar clientes.'
   }
 
-  return 'Não foi possível cadastrar o cliente. Tente novamente.'
+  return mode === 'edit'
+    ? 'Não foi possível salvar as alterações. Tente novamente.'
+    : 'Não foi possível cadastrar o cliente. Tente novamente.'
 }
 
-function NewClientDialog({ onClose, onCreated }: NewClientDialogProps) {
+function ClientDialog({ mode, onClose, onSaved }: ClientDialogProps) {
+  const client = mode.kind === 'edit' ? mode.client : null
   const dialogRef = useRef<HTMLDialogElement>(null)
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [notes, setNotes] = useState('')
+  const [name, setName] = useState(client?.name ?? '')
+  const [phone, setPhone] = useState(client?.phone ?? '')
+  const [notes, setNotes] = useState(client?.notes ?? '')
   const [formErrors, setFormErrors] = useState<ClientFormErrors>({})
   const [submission, setSubmission] = useState<ClientSubmissionState>({
     status: 'idle',
@@ -160,22 +174,21 @@ function NewClientDialog({ onClose, onCreated }: NewClientDialogProps) {
     setSubmission({ status: 'submitting' })
 
     try {
-      const result = await createClient(validation.input)
+      const result = client
+        ? await updateClient(client.id, validation.input)
+        : await createClient(validation.input)
 
       if (result.error) {
         setSubmission({
           status: 'error',
           kind: 'supabase',
-          message: friendlyCreateError(result.error),
+          message: friendlySaveError(result.error, mode.kind),
           cause: result.error,
         })
         return
       }
 
-      setName('')
-      setPhone('')
-      setNotes('')
-      onCreated(result.data)
+      onSaved(result.data)
     } catch (error) {
       setSubmission({
         status: 'error',
@@ -190,7 +203,7 @@ function NewClientDialog({ onClose, onCreated }: NewClientDialogProps) {
     <dialog
       className="client-dialog"
       ref={dialogRef}
-      aria-labelledby="new-client-title"
+      aria-labelledby="client-form-title"
       onClose={onClose}
       onCancel={(event) => {
         if (isSubmitting) event.preventDefault()
@@ -199,14 +212,22 @@ function NewClientDialog({ onClose, onCreated }: NewClientDialogProps) {
       <form className="client-form" onSubmit={handleSubmit} noValidate>
         <header className="client-dialog__header">
           <div>
-            <span className="eyebrow">Novo cadastro</span>
-            <h2 id="new-client-title">Novo cliente</h2>
-            <p>Adicione os dados principais para iniciar o relacionamento.</p>
+            <span className="eyebrow">
+              {client ? 'Editar cadastro' : 'Novo cadastro'}
+            </span>
+            <h2 id="client-form-title">
+              {client ? 'Editar cliente' : 'Novo cliente'}
+            </h2>
+            <p>
+              {client
+                ? 'Atualize os dados principais deste cliente.'
+                : 'Adicione os dados principais para iniciar o relacionamento.'}
+            </p>
           </div>
           <button
             className="client-dialog__close"
             type="button"
-            aria-label="Fechar cadastro"
+            aria-label={client ? 'Fechar edição' : 'Fechar cadastro'}
             onClick={closeDialog}
             disabled={isSubmitting}
           >
@@ -298,7 +319,11 @@ function NewClientDialog({ onClose, onCreated }: NewClientDialogProps) {
             type="submit"
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Salvando…' : 'Cadastrar cliente'}
+            {isSubmitting
+              ? 'Salvando…'
+              : client
+                ? 'Salvar alterações'
+                : 'Cadastrar cliente'}
           </button>
         </footer>
       </form>
@@ -312,8 +337,8 @@ export function ClientsPage() {
   })
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [search, setSearch] = useState('')
-  const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [creationSuccess, setCreationSuccess] = useState<string | null>(null)
+  const [clientForm, setClientForm] = useState<ClientFormMode | null>(null)
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
 
   useEffect(() => {
     let isCurrent = true
@@ -353,14 +378,25 @@ export function ClientsPage() {
   }
 
   function openCreateDialog() {
-    setCreationSuccess(null)
-    setIsCreateOpen(true)
+    setSaveSuccess(null)
+    setClientForm({ kind: 'create' })
   }
 
-  function handleClientCreated(client: ClientListItem) {
-    setIsCreateOpen(false)
+  function openEditDialog(client: ClientListItem) {
+    setSaveSuccess(null)
+    setClientForm({ kind: 'edit', client })
+  }
+
+  function handleClientSaved(client: ClientListItem) {
+    const action = clientForm?.kind
+
+    setClientForm(null)
     setSearch('')
-    setCreationSuccess(`${client.name} foi cadastrado com sucesso.`)
+    setSaveSuccess(
+      action === 'edit'
+        ? `${client.name} foi atualizado com sucesso.`
+        : `${client.name} foi cadastrado com sucesso.`,
+    )
     setLoadState({ status: 'loading' })
     setLoadAttempt((attempt) => attempt + 1)
   }
@@ -382,9 +418,9 @@ export function ClientsPage() {
         </button>
       </header>
 
-      {creationSuccess && (
+      {saveSuccess && (
         <p className="clients-success" role="status">
-          {creationSuccess}
+          {saveSuccess}
         </p>
       )}
 
@@ -463,6 +499,7 @@ export function ClientsPage() {
             <span>Cliente</span>
             <span>Telefone</span>
             <span>Status</span>
+            <span>Ações</span>
           </div>
           <ul>
             {visibleClients.map((client) => {
@@ -482,6 +519,14 @@ export function ClientsPage() {
                   >
                     {client.active ? 'Ativo' : 'Inativo'}
                   </span>
+                  <button
+                    className="client-row__edit"
+                    type="button"
+                    aria-label={`Editar ${client.name}`}
+                    onClick={() => openEditDialog(client)}
+                  >
+                    Editar
+                  </button>
                 </li>
               )
             })}
@@ -489,10 +534,16 @@ export function ClientsPage() {
         </div>
       )}
 
-      {isCreateOpen && (
-        <NewClientDialog
-          onClose={() => setIsCreateOpen(false)}
-          onCreated={handleClientCreated}
+      {clientForm && (
+        <ClientDialog
+          key={
+            clientForm.kind === 'edit'
+              ? `edit-${clientForm.client.id}`
+              : 'create'
+          }
+          mode={clientForm}
+          onClose={() => setClientForm(null)}
+          onSaved={handleClientSaved}
         />
       )}
     </section>
