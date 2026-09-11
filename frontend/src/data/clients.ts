@@ -9,6 +9,12 @@ export type ClientListItem = Pick<
   'id' | 'name' | 'phone' | 'notes' | 'active'
 >
 
+export interface CreateClientInput {
+  name: string
+  phone: string
+  notes?: string | null
+}
+
 export interface ClientsDataError {
   code: string
   message: string
@@ -18,6 +24,10 @@ export interface ClientsDataError {
 
 export type ListClientsResult =
   | { data: ClientListItem[]; error: null }
+  | { data: null; error: ClientsDataError }
+
+export type CreateClientResult =
+  | { data: ClientListItem; error: null }
   | { data: null; error: ClientsDataError }
 
 function toClientsDataError(error: PostgrestError): ClientsDataError {
@@ -35,6 +45,27 @@ export async function listClients(): Promise<ListClientsResult> {
     .select('id, name, phone, notes, active')
     .order('name', { ascending: true })
     .order('id', { ascending: true })
+
+  if (error) {
+    return { data: null, error: toClientsDataError(error) }
+  }
+
+  return { data, error: null }
+}
+
+export async function createClient(
+  input: CreateClientInput,
+): Promise<CreateClientResult> {
+  const notes = input.notes?.trim()
+  const { data, error } = await supabase
+    .from('clients')
+    .insert({
+      name: input.name.trim(),
+      phone: input.phone.trim(),
+      notes: notes || null,
+    })
+    .select('id, name, phone, notes, active')
+    .single()
 
   if (error) {
     return { data: null, error: toClientsDataError(error) }

@@ -1,8 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
 import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
+import {
+  createClient,
   listClients,
   type ClientListItem,
   type ClientsDataError,
+  type CreateClientInput,
 } from '../data/clients'
 
 type ClientsLoadState =
@@ -38,12 +46,274 @@ function clientsCountLabel(count: number) {
   return `${count} ${count === 1 ? 'cliente' : 'clientes'}`
 }
 
+interface ClientFormErrors {
+  name?: string
+  phone?: string
+}
+
+type ClientSubmissionState =
+  | { status: 'idle' }
+  | { status: 'submitting' }
+  | {
+      status: 'error'
+      kind: 'supabase' | 'unexpected'
+      message: string
+      cause: ClientsDataError | unknown
+    }
+
+interface NewClientDialogProps {
+  onClose: () => void
+  onCreated: (client: ClientListItem) => void
+}
+
+function validateClientForm(
+  name: string,
+  phone: string,
+  notes: string,
+): { input: CreateClientInput | null; errors: ClientFormErrors } {
+  const trimmedName = name.trim()
+  const trimmedPhone = phone.trim()
+  const trimmedNotes = notes.trim()
+  const errors: ClientFormErrors = {}
+
+  if (!trimmedName) {
+    errors.name = 'Informe o nome do cliente.'
+  } else if (trimmedName.length < 2) {
+    errors.name = 'O nome deve ter pelo menos 2 caracteres.'
+  } else if (trimmedName.length > 150) {
+    errors.name = 'O nome deve ter no máximo 150 caracteres.'
+  }
+
+  if (!trimmedPhone) {
+    errors.phone = 'Informe o telefone do cliente.'
+  } else if (trimmedPhone.length < 8) {
+    errors.phone = 'O telefone deve ter pelo menos 8 caracteres.'
+  } else if (trimmedPhone.length > 30) {
+    errors.phone = 'O telefone deve ter no máximo 30 caracteres.'
+  }
+
+  return {
+    input:
+      Object.keys(errors).length === 0
+        ? {
+            name: trimmedName,
+            phone: trimmedPhone,
+            notes: trimmedNotes || null,
+          }
+        : null,
+    errors,
+  }
+}
+
+function friendlyCreateError(error: ClientsDataError) {
+  const databaseMessage = `${error.message} ${error.details ?? ''}`
+
+  if (error.code === '23514') {
+    if (databaseMessage.includes('clients_name_check')) {
+      return 'Revise o nome: ele deve ter entre 2 e 150 caracteres.'
+    }
+
+    if (databaseMessage.includes('clients_phone_check')) {
+      return 'Revise o telefone: ele deve ter entre 8 e 30 caracteres.'
+    }
+
+    return 'Revise os dados informados e tente novamente.'
+  }
+
+  if (error.code === '42501') {
+    return 'Sua conta não possui permissão para cadastrar clientes.'
+  }
+
+  return 'Não foi possível cadastrar o cliente. Tente novamente.'
+}
+
+function NewClientDialog({ onClose, onCreated }: NewClientDialogProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [notes, setNotes] = useState('')
+  const [formErrors, setFormErrors] = useState<ClientFormErrors>({})
+  const [submission, setSubmission] = useState<ClientSubmissionState>({
+    status: 'idle',
+  })
+  const isSubmitting = submission.status === 'submitting'
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (dialog && !dialog.open) dialog.showModal()
+  }, [])
+
+  function closeDialog() {
+    if (!isSubmitting) dialogRef.current?.close()
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (isSubmitting) return
+
+    const validation = validateClientForm(name, phone, notes)
+    setFormErrors(validation.errors)
+    setSubmission({ status: 'idle' })
+
+    if (!validation.input) return
+
+    setSubmission({ status: 'submitting' })
+
+    try {
+      const result = await createClient(validation.input)
+
+      if (result.error) {
+        setSubmission({
+          status: 'error',
+          kind: 'supabase',
+          message: friendlyCreateError(result.error),
+          cause: result.error,
+        })
+        return
+      }
+
+      setName('')
+      setPhone('')
+      setNotes('')
+      onCreated(result.data)
+    } catch (error) {
+      setSubmission({
+        status: 'error',
+        kind: 'unexpected',
+        message: 'Ocorreu uma falha inesperada. Tente novamente.',
+        cause: error,
+      })
+    }
+  }
+
+  return (
+    <dialog
+      className="client-dialog"
+      ref={dialogRef}
+      aria-labelledby="new-client-title"
+      onClose={onClose}
+      onCancel={(event) => {
+        if (isSubmitting) event.preventDefault()
+      }}
+    >
+      <form className="client-form" onSubmit={handleSubmit} noValidate>
+        <header className="client-dialog__header">
+          <div>
+            <span className="eyebrow">Novo cadastro</span>
+            <h2 id="new-client-title">Novo cliente</h2>
+            <p>Adicione os dados principais para iniciar o relacionamento.</p>
+          </div>
+          <button
+            className="client-dialog__close"
+            type="button"
+            aria-label="Fechar cadastro"
+            onClick={closeDialog}
+            disabled={isSubmitting}
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="client-form__fields">
+          <div className="client-form__field">
+            <label htmlFor="client-name">Nome</label>
+            <input
+              id="client-name"
+              name="name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              autoComplete="name"
+              autoFocus
+              required
+              maxLength={150}
+              disabled={isSubmitting}
+              aria-invalid={Boolean(formErrors.name)}
+              aria-describedby={formErrors.name ? 'client-name-error' : undefined}
+            />
+            {formErrors.name && (
+              <p className="client-form__error" id="client-name-error" role="alert">
+                {formErrors.name}
+              </p>
+            )}
+          </div>
+
+          <div className="client-form__field">
+            <label htmlFor="client-phone">Telefone</label>
+            <input
+              id="client-phone"
+              name="phone"
+              type="tel"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              autoComplete="tel"
+              required
+              maxLength={30}
+              disabled={isSubmitting}
+              aria-invalid={Boolean(formErrors.phone)}
+              aria-describedby={formErrors.phone ? 'client-phone-error' : undefined}
+            />
+            {formErrors.phone && (
+              <p
+                className="client-form__error"
+                id="client-phone-error"
+                role="alert"
+              >
+                {formErrors.phone}
+              </p>
+            )}
+          </div>
+
+          <div className="client-form__field">
+            <label htmlFor="client-notes">
+              Observações <span>Opcional</span>
+            </label>
+            <textarea
+              id="client-notes"
+              name="notes"
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              rows={4}
+              disabled={isSubmitting}
+            />
+          </div>
+        </div>
+
+        {submission.status === 'error' && (
+          <p className="client-form__submit-error" role="alert">
+            {submission.message}
+          </p>
+        )}
+
+        <footer className="client-form__actions">
+          <button
+            className="client-form__cancel"
+            type="button"
+            onClick={closeDialog}
+            disabled={isSubmitting}
+          >
+            Cancelar
+          </button>
+          <button
+            className="primary-button client-form__submit"
+            type="submit"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Salvando…' : 'Cadastrar cliente'}
+          </button>
+        </footer>
+      </form>
+    </dialog>
+  )
+}
+
 export function ClientsPage() {
   const [loadState, setLoadState] = useState<ClientsLoadState>({
     status: 'loading',
   })
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [search, setSearch] = useState('')
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [creationSuccess, setCreationSuccess] = useState<string | null>(null)
 
   useEffect(() => {
     let isCurrent = true
@@ -82,6 +352,19 @@ export function ClientsPage() {
     setLoadAttempt((attempt) => attempt + 1)
   }
 
+  function openCreateDialog() {
+    setCreationSuccess(null)
+    setIsCreateOpen(true)
+  }
+
+  function handleClientCreated(client: ClientListItem) {
+    setIsCreateOpen(false)
+    setSearch('')
+    setCreationSuccess(`${client.name} foi cadastrado com sucesso.`)
+    setLoadState({ status: 'loading' })
+    setLoadAttempt((attempt) => attempt + 1)
+  }
+
   return (
     <section className="clients-page" aria-labelledby="clients-title">
       <header className="clients-page__heading">
@@ -90,7 +373,20 @@ export function ClientsPage() {
           <h2 id="clients-title">Clientes</h2>
           <p>Consulte contatos e informações da base do salão.</p>
         </div>
+        <button
+          className="clients-new-button"
+          type="button"
+          onClick={openCreateDialog}
+        >
+          Novo cliente
+        </button>
       </header>
+
+      {creationSuccess && (
+        <p className="clients-success" role="status">
+          {creationSuccess}
+        </p>
+      )}
 
       <div className="clients-toolbar">
         <label htmlFor="clients-search">Buscar clientes</label>
@@ -191,6 +487,13 @@ export function ClientsPage() {
             })}
           </ul>
         </div>
+      )}
+
+      {isCreateOpen && (
+        <NewClientDialog
+          onClose={() => setIsCreateOpen(false)}
+          onCreated={handleClientCreated}
+        />
       )}
     </section>
   )
