@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { ProtectedRoute, PublicOnlyRoute } from './components/RouteGuards'
 import { AuthProvider } from './hooks/AuthProvider'
+import { AgendaPage } from './pages/AgendaPage'
 import { ClientsPage } from './pages/ClientsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
@@ -20,16 +21,7 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route index element={<DashboardPage />} />
-              <Route
-                path="agenda"
-                element={
-                  <PlaceholderPage
-                    title="Agenda"
-                    description="A visão diária e semanal dos agendamentos será construída aqui."
-                    icon="calendar"
-                  />
-                }
-              />
+              <Route path="agenda" element={<AgendaPage />} />
               <Route path="clientes" element={<ClientsPage />} />
               <Route path="servicos" element={<ServicesPage />} />
               <Route
