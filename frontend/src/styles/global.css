@@ -1314,7 +1314,7 @@ a {
 .services-list__header,
 .service-row {
   display: grid;
-  grid-template-columns: minmax(210px, 1fr) minmax(150px, 0.5fr) minmax(180px, 0.6fr) 86px 64px;
+  grid-template-columns: minmax(210px, 1fr) minmax(150px, 0.5fr) minmax(180px, 0.6fr) 86px 128px;
   align-items: center;
   gap: 24px;
 }

@@ -104,3 +104,23 @@ export async function updateService(
 
   return { data, error: null }
 }
+
+export async function setServiceActive(
+  id: ServiceListItem['id'],
+  active: ServiceListItem['active'],
+): Promise<ServiceMutationResult> {
+  const { data, error } = await supabase
+    .from('services')
+    .update({ active })
+    .eq('id', id)
+    .select(
+      'id, name, estimated_duration_minutes, suggested_return_months, active',
+    )
+    .single()
+
+  if (error) {
+    return { data: null, error: toServicesDataError(error) }
+  }
+
+  return { data, error: null }
+}

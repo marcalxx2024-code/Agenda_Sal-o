@@ -8,6 +8,7 @@ import {
 import {
   createService,
   listServices,
+  setServiceActive,
   updateService,
   type ServiceFormInput,
   type ServiceListItem,
@@ -416,6 +417,165 @@ function ServiceDialog({ mode, onClose, onSaved }: ServiceDialogProps) {
   )
 }
 
+type ServiceActiveSubmissionState =
+  | { status: 'idle' }
+  | { status: 'submitting' }
+  | {
+      status: 'error'
+      kind: 'supabase' | 'unexpected'
+      message: string
+      cause: ServicesDataError | unknown
+    }
+
+interface ServiceActiveDialogProps {
+  service: ServiceListItem
+  onClose: () => void
+  onUpdated: (service: ServiceListItem) => void
+}
+
+function friendlyActiveError(error: ServicesDataError) {
+  if (error.code === '42501') {
+    return 'Sua conta não possui permissão para alterar o status de serviços.'
+  }
+
+  if (error.code === 'PGRST116') {
+    return 'Não foi possível localizar o serviço ou sua conta não possui permissão para alterá-lo.'
+  }
+
+  return 'Não foi possível alterar o status do serviço. Tente novamente.'
+}
+
+function ServiceActiveDialog({
+  service,
+  onClose,
+  onUpdated,
+}: ServiceActiveDialogProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const [submission, setSubmission] = useState<ServiceActiveSubmissionState>({
+    status: 'idle',
+  })
+  const isSubmitting = submission.status === 'submitting'
+  const isReactivating = !service.active
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (dialog && !dialog.open) dialog.showModal()
+  }, [])
+
+  function closeDialog() {
+    if (!isSubmitting) dialogRef.current?.close()
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (isSubmitting) return
+
+    setSubmission({ status: 'submitting' })
+
+    try {
+      const result = await setServiceActive(service.id, isReactivating)
+
+      if (result.error) {
+        setSubmission({
+          status: 'error',
+          kind: 'supabase',
+          message: friendlyActiveError(result.error),
+          cause: result.error,
+        })
+        return
+      }
+
+      onUpdated(result.data)
+    } catch (error) {
+      setSubmission({
+        status: 'error',
+        kind: 'unexpected',
+        message: 'Ocorreu uma falha inesperada. Tente novamente.',
+        cause: error,
+      })
+    }
+  }
+
+  return (
+    <dialog
+      className="client-dialog client-active-dialog"
+      ref={dialogRef}
+      aria-labelledby="service-active-title"
+      aria-describedby="service-active-description"
+      onClose={onClose}
+      onCancel={(event) => {
+        if (isSubmitting) event.preventDefault()
+      }}
+    >
+      <form className="client-form" onSubmit={handleSubmit}>
+        <header className="client-dialog__header">
+          <div>
+            <span className="eyebrow">Status do serviço</span>
+            <h2 id="service-active-title">
+              {isReactivating ? 'Reativar serviço?' : 'Inativar serviço?'}
+            </h2>
+            <p>{service.name}</p>
+          </div>
+          <button
+            className="client-dialog__close"
+            type="button"
+            aria-label={
+              isReactivating ? 'Fechar reativação' : 'Fechar inativação'
+            }
+            onClick={closeDialog}
+            disabled={isSubmitting}
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="client-active-dialog__body">
+          {isReactivating ? (
+            <p id="service-active-description">
+              O serviço voltará a ficar disponível para novos agendamentos e
+              atendimentos.
+            </p>
+          ) : (
+            <p id="service-active-description">
+              O serviço não poderá ser usado em novos agendamentos ou
+              atendimentos avulsos. O histórico e os planos já existentes serão
+              preservados.
+            </p>
+          )}
+        </div>
+
+        {submission.status === 'error' && (
+          <p className="client-form__submit-error" role="alert">
+            {submission.message}
+          </p>
+        )}
+
+        <footer className="client-form__actions">
+          <button
+            className="client-form__cancel"
+            type="button"
+            onClick={closeDialog}
+            disabled={isSubmitting}
+          >
+            Cancelar
+          </button>
+          <button
+            className="primary-button client-form__submit"
+            type="submit"
+            disabled={isSubmitting}
+          >
+            {isSubmitting
+              ? 'Processando…'
+              : isReactivating
+                ? 'Reativar serviço'
+                : 'Inativar serviço'}
+          </button>
+        </footer>
+      </form>
+    </dialog>
+  )
+}
+
 function durationLabel(durationMinutes: number) {
   if (durationMinutes < 60) return `${durationMinutes} min`
 
@@ -436,6 +596,8 @@ export function ServicesPage() {
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [search, setSearch] = useState('')
   const [serviceForm, setServiceForm] = useState<ServiceFormMode | null>(null)
+  const [activeActionService, setActiveActionService] =
+    useState<ServiceListItem | null>(null)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
 
   useEffect(() => {
@@ -494,6 +656,20 @@ export function ServicesPage() {
       action === 'edit'
         ? `${service.name} foi atualizado com sucesso.`
         : `${service.name} foi cadastrado com sucesso.`,
+    )
+    setLoadState({ status: 'loading' })
+    setLoadAttempt((attempt) => attempt + 1)
+  }
+
+  function openActiveDialog(service: ServiceListItem) {
+    setSaveSuccess(null)
+    setActiveActionService(service)
+  }
+
+  function handleServiceActiveUpdated(service: ServiceListItem) {
+    setActiveActionService(null)
+    setSaveSuccess(
+      `${service.name} foi ${service.active ? 'reativado' : 'inativado'} com sucesso.`,
     )
     setLoadState({ status: 'loading' })
     setLoadAttempt((attempt) => attempt + 1)
@@ -648,6 +824,14 @@ export function ServicesPage() {
                   >
                     Editar
                   </button>
+                  <button
+                    className="service-row__action"
+                    type="button"
+                    aria-label={`${service.active ? 'Inativar' : 'Reativar'} ${service.name}`}
+                    onClick={() => openActiveDialog(service)}
+                  >
+                    {service.active ? 'Inativar' : 'Reativar'}
+                  </button>
                 </div>
               </li>
             ))}
@@ -665,6 +849,15 @@ export function ServicesPage() {
           mode={serviceForm}
           onClose={() => setServiceForm(null)}
           onSaved={handleServiceSaved}
+        />
+      )}
+
+      {activeActionService && (
+        <ServiceActiveDialog
+          key={`${activeActionService.id}-${activeActionService.active}`}
+          service={activeActionService}
+          onClose={() => setActiveActionService(null)}
+          onUpdated={handleServiceActiveUpdated}
         />
       )}
     </section>
