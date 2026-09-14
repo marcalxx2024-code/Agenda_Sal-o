@@ -858,7 +858,8 @@ a {
 }
 
 .clients-new-button,
-.services-new-button {
+.services-new-button,
+.agenda-new-button {
   min-height: 44px;
   padding: 0 18px;
   border: 0;
@@ -872,12 +873,14 @@ a {
 }
 
 .clients-new-button:hover,
-.services-new-button:hover {
+.services-new-button:hover,
+.agenda-new-button:hover {
   background: #634245;
 }
 
 .clients-success,
-.services-success {
+.services-success,
+.agenda-success {
   margin: -8px 0 0;
   padding: 12px 15px;
   border: 1px solid #ccd1bd;
@@ -1240,6 +1243,7 @@ a {
 }
 
 .client-form__field input,
+.client-form__field select,
 .client-form__field textarea {
   width: 100%;
   padding: 0 14px;
@@ -1250,7 +1254,8 @@ a {
   resize: vertical;
 }
 
-.client-form__field input {
+.client-form__field input,
+.client-form__field select {
   height: 48px;
 }
 
@@ -1262,13 +1267,15 @@ a {
 }
 
 .client-form__field input:focus,
+.client-form__field select:focus,
 .client-form__field textarea:focus {
   border-color: var(--rose);
   outline: none;
   box-shadow: 0 0 0 4px rgba(155, 107, 111, 0.12);
 }
 
-.client-form__field input[aria-invalid="true"] {
+.client-form__field input[aria-invalid="true"],
+.client-form__field select[aria-invalid="true"] {
   border-color: var(--danger);
 }
 
@@ -1391,6 +1398,202 @@ a {
 }
 
 /* Agenda */
+
+.agenda-page__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.booking-dialog {
+  width: min(calc(100% - 36px), 720px);
+  max-height: calc(100svh - 36px);
+}
+
+.booking-form__fields {
+  gap: 22px;
+}
+
+.booking-form__options-state,
+.booking-form__options-error {
+  display: flex;
+  min-height: 50px;
+  padding: 12px 14px;
+  align-items: center;
+  border-radius: 9px;
+  color: var(--ink-soft);
+  background: #faf6f0;
+  font-size: 12px;
+  gap: 10px;
+}
+
+.booking-form__options-state .agenda-state__pulse {
+  width: 10px;
+  height: 10px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.booking-form__options-error {
+  justify-content: space-between;
+  border: 1px solid rgba(154, 63, 69, 0.18);
+  color: var(--danger);
+  background: rgba(154, 63, 69, 0.06);
+}
+
+.booking-form__options-error p {
+  margin: 0;
+}
+
+.booking-form__options-error button {
+  padding: 6px 2px;
+  border: 0;
+  color: var(--rose-deep);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.booking-form__options-error button:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.booking-form__date-time {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.booking-form__services {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  gap: 10px;
+}
+
+.booking-form__services legend {
+  margin-bottom: 8px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.booking-form__services legend span {
+  margin-left: 5px;
+  color: #968b84;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.booking-form__service-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.booking-form__service-option {
+  display: flex;
+  min-width: 0;
+  min-height: 58px;
+  padding: 10px 12px;
+  align-items: center;
+  border: 1px solid #ded4ca;
+  border-radius: 9px;
+  background: #fffefa;
+  cursor: pointer;
+  gap: 10px;
+}
+
+.booking-form__service-option:has(input:checked) {
+  border-color: #c8aaa8;
+  background: var(--rose-soft);
+  box-shadow: 0 0 0 3px rgba(155, 107, 111, 0.08);
+}
+
+.booking-form__service-option:focus-within {
+  border-color: var(--rose);
+  box-shadow: 0 0 0 4px rgba(155, 107, 111, 0.12);
+}
+
+.booking-form__service-option--unavailable {
+  color: #897e77;
+  background: #f3efeb;
+  cursor: not-allowed;
+}
+
+.booking-form__service-option input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: var(--rose-deep);
+}
+
+.booking-form__service-option > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.booking-form__service-option strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-form__service-option small,
+.booking-form__empty-option {
+  color: #81766f;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.booking-form__service-option--unavailable small {
+  color: #8b6565;
+}
+
+.booking-form__empty-option {
+  margin: 0;
+  padding: 14px;
+  border-radius: 9px;
+  background: #f3efeb;
+  font-size: 12px;
+}
+
+.booking-form__duration-summary {
+  display: flex;
+  min-height: 46px;
+  padding: 10px 12px;
+  align-items: center;
+  border-radius: 9px;
+  color: var(--ink-soft);
+  background: var(--sand-soft);
+  font-size: 11px;
+  gap: 10px;
+}
+
+.booking-form__duration-summary strong {
+  margin-left: auto;
+  color: var(--ink);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.booking-form__duration-summary small {
+  padding-left: 10px;
+  border-left: 1px solid #ddd0c2;
+  color: var(--rose-deep);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
 
 .agenda-result-count {
   color: var(--ink-soft);
@@ -1780,8 +1983,16 @@ a {
   }
 
   .clients-new-button,
-  .services-new-button {
+  .services-new-button,
+  .agenda-new-button {
     width: 100%;
+  }
+
+  .agenda-page__header-actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
   }
 
   .clients-search-row,
@@ -1832,6 +2043,10 @@ a {
     max-height: calc(100svh - 24px);
   }
 
+  .booking-dialog {
+    width: calc(100% - 24px);
+  }
+
   .client-dialog__header,
   .client-form__fields,
   .client-active-dialog__body {
@@ -1853,6 +2068,27 @@ a {
   .client-form__cancel,
   .client-form__submit {
     width: 100%;
+  }
+
+  .booking-form__date-time,
+  .booking-form__service-list {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-form__duration-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .booking-form__duration-summary strong {
+    margin-left: 0;
+  }
+
+  .booking-form__duration-summary small {
+    padding-top: 7px;
+    padding-left: 0;
+    border-top: 1px solid #ddd0c2;
+    border-left: 0;
   }
 
   .service-row {

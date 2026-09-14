@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { BookingDialog } from '../components/BookingDialog'
 import {
   listBookings,
   type AgendaBookingListItem,
@@ -88,6 +89,8 @@ export function AgendaPage() {
     status: 'loading',
   })
   const [loadAttempt, setLoadAttempt] = useState(0)
+  const [isBookingFormOpen, setIsBookingFormOpen] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
 
   useEffect(() => {
     let isCurrent = true
@@ -121,6 +124,18 @@ export function AgendaPage() {
     setLoadAttempt((attempt) => attempt + 1)
   }
 
+  function openCreateDialog() {
+    setSaveSuccess(null)
+    setIsBookingFormOpen(true)
+  }
+
+  function handleBookingCreated() {
+    setIsBookingFormOpen(false)
+    setSaveSuccess('Agendamento criado com sucesso.')
+    setLoadState({ status: 'loading' })
+    setLoadAttempt((attempt) => attempt + 1)
+  }
+
   return (
     <section className="agenda-page" aria-labelledby="agenda-title">
       <header className="agenda-page__heading">
@@ -129,12 +144,27 @@ export function AgendaPage() {
           <h2 id="agenda-title">Agendamentos</h2>
           <p>Consulte horários, clientes e serviços já programados.</p>
         </div>
-        {loadState.status === 'loaded' && (
-          <span className="agenda-result-count" aria-live="polite">
-            {bookingCountLabel(bookings.length)}
-          </span>
-        )}
+        <div className="agenda-page__header-actions">
+          {loadState.status === 'loaded' && (
+            <span className="agenda-result-count" aria-live="polite">
+              {bookingCountLabel(bookings.length)}
+            </span>
+          )}
+          <button
+            className="agenda-new-button"
+            type="button"
+            onClick={openCreateDialog}
+          >
+            Novo agendamento
+          </button>
+        </div>
       </header>
+
+      {saveSuccess && (
+        <p className="agenda-success" role="status">
+          {saveSuccess}
+        </p>
+      )}
 
       {loadState.status === 'loading' && (
         <div className="agenda-state" role="status" aria-live="polite">
@@ -231,6 +261,13 @@ export function AgendaPage() {
             })}
           </ul>
         </section>
+      )}
+
+      {isBookingFormOpen && (
+        <BookingDialog
+          onClose={() => setIsBookingFormOpen(false)}
+          onCreated={handleBookingCreated}
+        />
       )}
     </section>
   )
