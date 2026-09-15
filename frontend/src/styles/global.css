@@ -1113,7 +1113,8 @@ a {
 }
 
 .client-row__action,
-.service-row__action {
+.service-row__action,
+.booking-row__action {
   padding: 5px 0;
   border: 0;
   color: var(--rose-deep);
@@ -1123,7 +1124,8 @@ a {
 }
 
 .client-row__action:hover,
-.service-row__action:hover {
+.service-row__action:hover,
+.booking-row__action:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -1738,6 +1740,12 @@ a {
 .booking-status--unknown {
   color: #6f625a;
   background: var(--sand-soft);
+}
+
+.booking-row__controls {
+  display: grid;
+  justify-items: start;
+  gap: 7px;
 }
 
 .booking-row__notes {

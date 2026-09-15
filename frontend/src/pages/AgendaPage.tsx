@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
+import { BookingConfirmDialog } from '../components/BookingConfirmDialog'
 import { BookingDialog } from '../components/BookingDialog'
 import {
   listBookings,
   type AgendaBookingListItem,
   type BookingsDataError,
+  type ConfirmedBooking,
 } from '../data/bookings'
 
 type AgendaLoadState =
@@ -90,6 +92,8 @@ export function AgendaPage() {
   })
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [isBookingFormOpen, setIsBookingFormOpen] = useState(false)
+  const [bookingToConfirm, setBookingToConfirm] =
+    useState<AgendaBookingListItem | null>(null)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
 
   useEffect(() => {
@@ -132,6 +136,34 @@ export function AgendaPage() {
   function handleBookingCreated() {
     setIsBookingFormOpen(false)
     setSaveSuccess('Agendamento criado com sucesso.')
+    setLoadState({ status: 'loading' })
+    setLoadAttempt((attempt) => attempt + 1)
+  }
+
+  function openConfirmDialog(booking: AgendaBookingListItem) {
+    setSaveSuccess(null)
+    setBookingToConfirm(booking)
+  }
+
+  function handleBookingConfirmed(confirmedBooking: ConfirmedBooking) {
+    setBookingToConfirm(null)
+    setSaveSuccess('Agendamento confirmado com sucesso.')
+    setLoadState((currentState) =>
+      currentState.status === 'loaded'
+        ? {
+            status: 'loaded',
+            bookings: currentState.bookings.map((booking) =>
+              booking.id === confirmedBooking.booking_id
+                ? { ...booking, status: confirmedBooking.booking_status }
+                : booking,
+            ),
+          }
+        : currentState,
+    )
+    setLoadAttempt((attempt) => attempt + 1)
+  }
+
+  function refreshInvalidatedBooking() {
     setLoadState({ status: 'loading' })
     setLoadAttempt((attempt) => attempt + 1)
   }
@@ -204,7 +236,7 @@ export function AgendaPage() {
             <span>Cliente</span>
             <span>Serviços</span>
             <span>Duração</span>
-            <span>Status</span>
+            <span>Status e ações</span>
           </div>
           <ul>
             {bookings.map((booking) => {
@@ -246,11 +278,23 @@ export function AgendaPage() {
                     <span className="booking-row__label">Duração</span>
                     {durationLabel(booking.starts_at, booking.ends_at)}
                   </div>
-                  <span
-                    className={`booking-status booking-status--${details.tone}`}
-                  >
-                    {details.label}
-                  </span>
+                  <div className="booking-row__controls">
+                    <span
+                      className={`booking-status booking-status--${details.tone}`}
+                    >
+                      {details.label}
+                    </span>
+                    {booking.status === 'scheduled' && (
+                      <button
+                        className="booking-row__action"
+                        type="button"
+                        aria-label={`Confirmar agendamento de ${booking.client?.name ?? 'cliente indisponível'} em ${schedule.date}, ${schedule.time}`}
+                        onClick={() => openConfirmDialog(booking)}
+                      >
+                        Confirmar
+                      </button>
+                    )}
+                  </div>
                   {notes && (
                     <p className="booking-row__notes">
                       <strong>Observações:</strong> {notes}
@@ -267,6 +311,16 @@ export function AgendaPage() {
         <BookingDialog
           onClose={() => setIsBookingFormOpen(false)}
           onCreated={handleBookingCreated}
+        />
+      )}
+
+      {bookingToConfirm && (
+        <BookingConfirmDialog
+          key={bookingToConfirm.id}
+          booking={bookingToConfirm}
+          onClose={() => setBookingToConfirm(null)}
+          onConfirmed={handleBookingConfirmed}
+          onInvalidated={refreshInvalidatedBooking}
         />
       )}
     </section>

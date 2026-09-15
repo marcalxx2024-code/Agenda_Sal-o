@@ -8,6 +8,10 @@ type CreateBookingArgs =
   Database['public']['Functions']['create_booking']['Args']
 type CreateBookingRow =
   Database['public']['Functions']['create_booking']['Returns'][number]
+type ConfirmBookingArgs =
+  Database['public']['Functions']['confirm_booking']['Args']
+type ConfirmBookingRow =
+  Database['public']['Functions']['confirm_booking']['Returns'][number]
 
 export type BookingClientOption = Pick<ClientRow, 'id' | 'name'>
 export type BookingServiceOption = Pick<
@@ -16,6 +20,7 @@ export type BookingServiceOption = Pick<
 >
 export type CreateBookingInput = CreateBookingArgs
 export type CreatedBooking = CreateBookingRow
+export type ConfirmedBooking = ConfirmBookingRow
 
 function agendaBookingsQuery() {
   return supabase
@@ -65,6 +70,10 @@ export type BookingFormOptionsResult =
 
 export type CreateBookingResult =
   | { data: CreatedBooking; error: null }
+  | { data: null; error: BookingsDataError }
+
+export type ConfirmBookingResult =
+  | { data: ConfirmedBooking; error: null }
   | { data: null; error: BookingsDataError }
 
 function toBookingsDataError(error: PostgrestError): BookingsDataError {
@@ -121,6 +130,20 @@ export async function createBooking(
   input: CreateBookingInput,
 ): Promise<CreateBookingResult> {
   const { data, error } = await supabase.rpc('create_booking', input).single()
+
+  if (error) {
+    return { data: null, error: toBookingsDataError(error) }
+  }
+
+  return { data, error: null }
+}
+
+export async function confirmBooking(
+  bookingId: ConfirmBookingArgs['p_booking_id'],
+): Promise<ConfirmBookingResult> {
+  const { data, error } = await supabase
+    .rpc('confirm_booking', { p_booking_id: bookingId })
+    .single()
 
   if (error) {
     return { data: null, error: toBookingsDataError(error) }
