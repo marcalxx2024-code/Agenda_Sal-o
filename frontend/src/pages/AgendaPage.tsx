@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react'
-import { BookingConfirmDialog } from '../components/BookingConfirmDialog'
+import {
+  BookingCancelDialog,
+  BookingConfirmDialog,
+} from '../components/BookingConfirmDialog'
 import { BookingDialog } from '../components/BookingDialog'
 import {
   listBookings,
   type AgendaBookingListItem,
+  type BookingStatusChange,
   type BookingsDataError,
+  type CancelledBooking,
   type ConfirmedBooking,
 } from '../data/bookings'
 
@@ -94,6 +99,8 @@ export function AgendaPage() {
   const [isBookingFormOpen, setIsBookingFormOpen] = useState(false)
   const [bookingToConfirm, setBookingToConfirm] =
     useState<AgendaBookingListItem | null>(null)
+  const [bookingToCancel, setBookingToCancel] =
+    useState<AgendaBookingListItem | null>(null)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
 
   useEffect(() => {
@@ -145,22 +152,37 @@ export function AgendaPage() {
     setBookingToConfirm(booking)
   }
 
-  function handleBookingConfirmed(confirmedBooking: ConfirmedBooking) {
-    setBookingToConfirm(null)
-    setSaveSuccess('Agendamento confirmado com sucesso.')
+  function reflectBookingStatus(changedBooking: BookingStatusChange) {
     setLoadState((currentState) =>
       currentState.status === 'loaded'
         ? {
             status: 'loaded',
             bookings: currentState.bookings.map((booking) =>
-              booking.id === confirmedBooking.booking_id
-                ? { ...booking, status: confirmedBooking.booking_status }
+              booking.id === changedBooking.booking_id
+                ? { ...booking, status: changedBooking.booking_status }
                 : booking,
             ),
           }
         : currentState,
     )
     setLoadAttempt((attempt) => attempt + 1)
+  }
+
+  function handleBookingConfirmed(confirmedBooking: ConfirmedBooking) {
+    setBookingToConfirm(null)
+    setSaveSuccess('Agendamento confirmado com sucesso.')
+    reflectBookingStatus(confirmedBooking)
+  }
+
+  function openCancelDialog(booking: AgendaBookingListItem) {
+    setSaveSuccess(null)
+    setBookingToCancel(booking)
+  }
+
+  function handleBookingCancelled(cancelledBooking: CancelledBooking) {
+    setBookingToCancel(null)
+    setSaveSuccess('Agendamento cancelado com sucesso.')
+    reflectBookingStatus(cancelledBooking)
   }
 
   function refreshInvalidatedBooking() {
@@ -294,6 +316,17 @@ export function AgendaPage() {
                         Confirmar
                       </button>
                     )}
+                    {(booking.status === 'scheduled' ||
+                      booking.status === 'confirmed') && (
+                      <button
+                        className="booking-row__action booking-row__action--cancel"
+                        type="button"
+                        aria-label={`Cancelar agendamento de ${booking.client?.name ?? 'cliente indisponível'} em ${schedule.date}, ${schedule.time}`}
+                        onClick={() => openCancelDialog(booking)}
+                      >
+                        Cancelar
+                      </button>
+                    )}
                   </div>
                   {notes && (
                     <p className="booking-row__notes">
@@ -320,6 +353,16 @@ export function AgendaPage() {
           booking={bookingToConfirm}
           onClose={() => setBookingToConfirm(null)}
           onConfirmed={handleBookingConfirmed}
+          onInvalidated={refreshInvalidatedBooking}
+        />
+      )}
+
+      {bookingToCancel && (
+        <BookingCancelDialog
+          key={bookingToCancel.id}
+          booking={bookingToCancel}
+          onClose={() => setBookingToCancel(null)}
+          onCancelled={handleBookingCancelled}
           onInvalidated={refreshInvalidatedBooking}
         />
       )}

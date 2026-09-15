@@ -1130,6 +1130,10 @@ a {
   text-underline-offset: 3px;
 }
 
+.booking-row__action--cancel {
+  color: var(--danger);
+}
+
 .client-dialog {
   width: min(calc(100% - 36px), 570px);
   max-height: min(760px, calc(100svh - 36px));
