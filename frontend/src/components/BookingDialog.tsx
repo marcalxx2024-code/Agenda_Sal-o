@@ -8,15 +8,35 @@ import {
 import {
   createBooking,
   listBookingFormOptions,
+  updateBooking,
+  type AgendaBookingListItem,
   type BookingFormOptions,
   type BookingsDataError,
   type CreateBookingInput,
+  type CreatedBooking,
+  type UpdateBookingInput,
+  type UpdatedBooking,
 } from '../data/bookings'
 
-interface BookingDialogProps {
+interface BookingDialogBaseProps {
   onClose: () => void
-  onCreated: () => void
 }
+
+interface BookingCreateDialogProps extends BookingDialogBaseProps {
+  booking?: undefined
+  onCreated: (booking: CreatedBooking) => void
+  onUpdated?: never
+  onInvalidated?: never
+}
+
+interface BookingEditDialogProps extends BookingDialogBaseProps {
+  booking: AgendaBookingListItem
+  onCreated?: never
+  onUpdated: (booking: UpdatedBooking) => void
+  onInvalidated: () => void
+}
+
+type BookingDialogProps = BookingCreateDialogProps | BookingEditDialogProps
 
 interface BookingFormErrors {
   client?: string
@@ -40,6 +60,7 @@ type BookingSubmissionState =
       kind: 'supabase' | 'unexpected'
       message: string
       cause: BookingsDataError | unknown
+      invalidated: boolean
     }
 
 const postgresIntegerMaximum = 2_147_483_647
@@ -59,6 +80,49 @@ function todayInputValue() {
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function bookingDateTimeInputValues(startsAt?: string) {
+  if (!startsAt) return { date: '', time: '' }
+
+  const parsedStartsAt = new Date(startsAt)
+  if (Number.isNaN(parsedStartsAt.getTime())) return { date: '', time: '' }
+
+  const year = parsedStartsAt.getFullYear()
+  const month = String(parsedStartsAt.getMonth() + 1).padStart(2, '0')
+  const day = String(parsedStartsAt.getDate()).padStart(2, '0')
+  const hours = String(parsedStartsAt.getHours()).padStart(2, '0')
+  const minutes = String(parsedStartsAt.getMinutes()).padStart(2, '0')
+
+  return {
+    date: `${year}-${month}-${day}`,
+    time: `${hours}:${minutes}`,
+  }
+}
+
+function bookingManualDurationInput(booking?: AgendaBookingListItem) {
+  if (!booking) return ''
+
+  const startsAt = new Date(booking.starts_at)
+  const endsAt = new Date(booking.ends_at)
+
+  if (
+    Number.isNaN(startsAt.getTime()) ||
+    Number.isNaN(endsAt.getTime())
+  ) {
+    return ''
+  }
+
+  const currentDuration = Math.round(
+    (endsAt.getTime() - startsAt.getTime()) / (60 * 1000),
+  )
+  const snapshotDuration = (booking.booking_services ?? []).reduce(
+    (total, service) => total + service.estimated_duration_minutes,
+    0,
+  )
+
+  if (currentDuration <= 0 || currentDuration === snapshotDuration) return ''
+  return String(currentDuration)
 }
 
 function parsePositiveInteger(value: string) {
@@ -85,6 +149,8 @@ function validateBookingForm(
     errors.client = 'Selecione uma cliente.'
   } else if (!selectedClient) {
     errors.client = 'A cliente selecionada não está mais disponível.'
+  } else if (!selectedClient.active) {
+    errors.client = 'A cliente atual está inativa. Selecione uma cliente ativa.'
   }
 
   if (!date) errors.date = 'Informe a data.'
@@ -110,12 +176,14 @@ function validateBookingForm(
 
   if (selectedServiceIds.length === 0) {
     errors.services = 'Selecione pelo menos um serviço.'
-  } else if (
-    selectedServices.some(
-      (service) => !service || service.estimated_duration_minutes === null,
-    )
-  ) {
+  } else if (selectedServices.some((service) => !service)) {
     errors.services = 'Revise os serviços selecionados e tente novamente.'
+  } else if (selectedServices.some((service) => !service?.active)) {
+    errors.services = 'Remova os serviços inativos antes de salvar.'
+  } else if (
+    selectedServices.some((service) => service?.estimated_duration_minutes === null)
+  ) {
+    errors.services = 'Remova os serviços sem duração estimada antes de salvar.'
   }
 
   const trimmedDuration = durationMinutes.trim()
@@ -155,15 +223,21 @@ function validateBookingForm(
   return { input, errors }
 }
 
-function friendlyCreateError(error: BookingsDataError) {
+function friendlySaveError(error: BookingsDataError, isEditing: boolean) {
   const databaseMessage = error.message.toLocaleLowerCase('en-US')
+
+  if (error.code === 'P0002') {
+    return 'Este agendamento não existe mais. A agenda está sendo atualizada.'
+  }
 
   if (error.code === '23P01') {
     return 'Esse horário conflita com outro agendamento ativo. Escolha outro horário.'
   }
 
   if (error.code === '42501' || error.code.startsWith('PGRST3')) {
-    return 'Sua sessão não possui permissão para criar agendamentos.'
+    return `Sua sessão não possui permissão para ${
+      isEditing ? 'editar' : 'criar'
+    } agendamentos.`
   }
 
   if (error.code === '23503') {
@@ -173,6 +247,10 @@ function friendlyCreateError(error: BookingsDataError) {
   }
 
   if (error.code === '55000') {
+    if (isEditing && databaseMessage.includes('cannot be edited')) {
+      return 'O agendamento mudou de status e não pode mais ser editado. A agenda está sendo atualizada.'
+    }
+
     if (databaseMessage.includes('client')) {
       return 'A cliente selecionada foi inativada. Escolha uma cliente ativa.'
     }
@@ -212,27 +290,41 @@ function friendlyCreateError(error: BookingsDataError) {
     return 'Os dados não atendem às regras do agendamento. Revise-os e tente novamente.'
   }
 
+  if (error.code === '40001' || error.code === '40P01') {
+    return 'Outra alteração ocorreu ao mesmo tempo. A agenda está sendo atualizada.'
+  }
+
   if (!error.code || databaseMessage.includes('fetch')) {
     return 'Não foi possível conectar ao serviço. Verifique sua conexão e tente novamente.'
   }
 
-  return 'Não foi possível criar o agendamento. Tente novamente.'
+  return `Não foi possível ${
+    isEditing ? 'atualizar' : 'criar'
+  } o agendamento. Tente novamente.`
 }
 
-function unexpectedCreateError(error: unknown) {
+function unexpectedSaveError(error: unknown) {
   return error instanceof TypeError
     ? 'Não foi possível conectar ao serviço. Verifique sua conexão e tente novamente.'
     : 'Ocorreu uma falha inesperada. Tente novamente.'
 }
 
-export function BookingDialog({ onClose, onCreated }: BookingDialogProps) {
+export function BookingDialog(props: BookingDialogProps) {
+  const { booking, onClose } = props
   const dialogRef = useRef<HTMLDialogElement>(null)
-  const [clientId, setClientId] = useState('')
-  const [date, setDate] = useState('')
-  const [time, setTime] = useState('')
-  const [selectedServiceIds, setSelectedServiceIds] = useState<number[]>([])
-  const [durationMinutes, setDurationMinutes] = useState('')
-  const [notes, setNotes] = useState('')
+  const initialDateTime = bookingDateTimeInputValues(booking?.starts_at)
+  const [clientId, setClientId] = useState(
+    booking?.client?.id === undefined ? '' : String(booking.client.id),
+  )
+  const [date, setDate] = useState(initialDateTime.date)
+  const [time, setTime] = useState(initialDateTime.time)
+  const [selectedServiceIds, setSelectedServiceIds] = useState<number[]>(
+    () => (booking?.booking_services ?? []).map((service) => service.service_id),
+  )
+  const [durationMinutes, setDurationMinutes] = useState(() =>
+    bookingManualDurationInput(booking),
+  )
+  const [notes, setNotes] = useState(booking?.notes ?? '')
   const [formErrors, setFormErrors] = useState<BookingFormErrors>({})
   const [optionsState, setOptionsState] = useState<OptionsLoadState>({
     status: 'loading',
@@ -242,6 +334,9 @@ export function BookingDialog({ onClose, onCreated }: BookingDialogProps) {
     status: 'idle',
   })
   const isSubmitting = submission.status === 'submitting'
+  const isInvalidated =
+    submission.status === 'error' && submission.invalidated
+  const isEditing = booking !== undefined
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -251,7 +346,16 @@ export function BookingDialog({ onClose, onCreated }: BookingDialogProps) {
   useEffect(() => {
     let isCurrent = true
 
-    void listBookingFormOptions()
+    void listBookingFormOptions(
+      booking
+        ? {
+            currentClientId: booking.client?.id,
+            currentServiceIds: (booking.booking_services ?? []).map(
+              (service) => service.service_id,
+            ),
+          }
+        : undefined,
+    )
       .then((result) => {
         if (!isCurrent) return
 
@@ -270,7 +374,7 @@ export function BookingDialog({ onClose, onCreated }: BookingDialogProps) {
     return () => {
       isCurrent = false
     }
-  }, [optionsLoadAttempt])
+  }, [booking, optionsLoadAttempt])
 
   const options =
     optionsState.status === 'loaded' ? optionsState.options : null
@@ -286,12 +390,15 @@ export function BookingDialog({ onClose, onCreated }: BookingDialogProps) {
     0,
   )
   const parsedManualDuration = parsePositiveInteger(durationMinutes.trim())
+  const activeClientCount =
+    options?.clients.filter((client) => client.active).length ?? 0
   const usableServiceCount =
     options?.services.filter(
-      (service) => service.estimated_duration_minutes !== null,
+      (service) =>
+        service.active && service.estimated_duration_minutes !== null,
     ).length ?? 0
   const canSubmit = Boolean(
-    options && options.clients.length > 0 && usableServiceCount > 0,
+    options && activeClientCount > 0 && usableServiceCount > 0,
   )
 
   function closeDialog() {
@@ -334,25 +441,48 @@ export function BookingDialog({ onClose, onCreated }: BookingDialogProps) {
     setSubmission({ status: 'submitting' })
 
     try {
-      const result = await createBooking(validation.input)
+      const result = booking
+        ? await updateBooking({
+            ...validation.input,
+            p_booking_id: booking.id,
+          } satisfies UpdateBookingInput)
+        : await createBooking(validation.input)
 
       if (result.error) {
+        const databaseMessage = result.error.message.toLocaleLowerCase('en-US')
+        const invalidated = Boolean(
+          booking &&
+            (result.error.code === 'P0002' ||
+              (result.error.code === '55000' &&
+                databaseMessage.includes('cannot be edited')) ||
+              result.error.code === '40001' ||
+              result.error.code === '40P01'),
+        )
+
+        if (invalidated && booking) props.onInvalidated()
+
         setSubmission({
           status: 'error',
           kind: 'supabase',
-          message: friendlyCreateError(result.error),
+          message: friendlySaveError(result.error, isEditing),
           cause: result.error,
+          invalidated,
         })
         return
       }
 
-      onCreated(result.data)
+      if (booking) {
+        props.onUpdated(result.data)
+      } else {
+        props.onCreated(result.data)
+      }
     } catch (error) {
       setSubmission({
         status: 'error',
         kind: 'unexpected',
-        message: unexpectedCreateError(error),
+        message: unexpectedSaveError(error),
         cause: error,
+        invalidated: false,
       })
     }
   }
@@ -370,14 +500,24 @@ export function BookingDialog({ onClose, onCreated }: BookingDialogProps) {
       <form className="client-form" onSubmit={handleSubmit} noValidate>
         <header className="client-dialog__header">
           <div>
-            <span className="eyebrow">Novo horário</span>
-            <h2 id="booking-form-title">Novo agendamento</h2>
-            <p>Defina cliente, início e serviços para reservar o horário.</p>
+            <span className="eyebrow">
+              {isEditing ? 'Alterar horário' : 'Novo horário'}
+            </span>
+            <h2 id="booking-form-title">
+              {isEditing ? 'Editar agendamento' : 'Novo agendamento'}
+            </h2>
+            <p>
+              {isEditing
+                ? 'Revise cliente, início e serviços antes de salvar.'
+                : 'Defina cliente, início e serviços para reservar o horário.'}
+            </p>
           </div>
           <button
             className="client-dialog__close"
             type="button"
-            aria-label="Fechar novo agendamento"
+            aria-label={
+              isEditing ? 'Fechar edição do agendamento' : 'Fechar novo agendamento'
+            }
             onClick={closeDialog}
             disabled={isSubmitting}
           >
@@ -413,7 +553,7 @@ export function BookingDialog({ onClose, onCreated }: BookingDialogProps) {
               onChange={(event) => setClientId(event.target.value)}
               autoFocus
               required
-              disabled={isSubmitting || !options || options.clients.length === 0}
+              disabled={isSubmitting || !options || activeClientCount === 0}
               aria-invalid={Boolean(formErrors.client)}
               aria-describedby={
                 formErrors.client ? 'booking-client-error' : undefined
@@ -422,11 +562,11 @@ export function BookingDialog({ onClose, onCreated }: BookingDialogProps) {
               <option value="">Selecione uma cliente</option>
               {options?.clients.map((client) => (
                 <option value={client.id} key={client.id}>
-                  {client.name}
+                  {client.name}{client.active ? '' : ' — inativa'}
                 </option>
               ))}
             </select>
-            {options && options.clients.length === 0 && (
+            {options && activeClientCount === 0 && (
               <small className="client-form__help">
                 Não há clientes ativos disponíveis para agendamento.
               </small>
@@ -534,7 +674,7 @@ export function BookingDialog({ onClose, onCreated }: BookingDialogProps) {
               Serviços <span>Obrigatório</span>
             </legend>
 
-            {options && options.services.length === 0 && (
+            {options && usableServiceCount === 0 && (
               <p className="booking-form__empty-option">
                 Não há serviços ativos disponíveis para agendamento.
               </p>
@@ -546,33 +686,45 @@ export function BookingDialog({ onClose, onCreated }: BookingDialogProps) {
                   const estimatedDuration =
                     service.estimated_duration_minutes
                   const hasDuration = estimatedDuration !== null
+                  const isSelected = selectedServiceIds.includes(service.id)
+                  const isAvailable = service.active && hasDuration
+                  const availabilityClass = isAvailable
+                    ? ''
+                    : isSelected
+                      ? ' booking-form__service-option--needs-removal'
+                      : ' booking-form__service-option--unavailable'
+                  let serviceDetails: string
+
+                  if (!service.active) {
+                    serviceDetails = isSelected
+                      ? 'Inativo — remova para salvar'
+                      : 'Inativo — indisponível'
+                  } else if (!hasDuration) {
+                    serviceDetails = isSelected
+                      ? 'Sem duração — remova para salvar'
+                      : 'Sem duração estimada — indisponível'
+                  } else {
+                    serviceDetails = durationLabel(estimatedDuration)
+                  }
 
                   return (
                     <label
-                      className={`booking-form__service-option${
-                        hasDuration
-                          ? ''
-                          : ' booking-form__service-option--unavailable'
-                      }`}
+                      className={`booking-form__service-option${availabilityClass}`}
                       key={service.id}
                     >
                       <input
                         type="checkbox"
                         name="service_ids"
                         value={service.id}
-                        checked={selectedServiceIds.includes(service.id)}
+                        checked={isSelected}
                         onChange={(event) =>
                           toggleService(service.id, event.target.checked)
                         }
-                        disabled={!hasDuration || isSubmitting}
+                        disabled={isSubmitting || (!isAvailable && !isSelected)}
                       />
                       <span>
                         <strong>{service.name}</strong>
-                        <small>
-                          {hasDuration
-                            ? durationLabel(estimatedDuration)
-                            : 'Sem duração estimada — indisponível'}
-                        </small>
+                        <small>{serviceDetails}</small>
                       </span>
                     </label>
                   )
@@ -675,9 +827,15 @@ export function BookingDialog({ onClose, onCreated }: BookingDialogProps) {
           <button
             className="primary-button client-form__submit"
             type="submit"
-            disabled={isSubmitting || !canSubmit}
+            disabled={isSubmitting || isInvalidated || !canSubmit}
           >
-            {isSubmitting ? 'Agendando…' : 'Criar agendamento'}
+            {isSubmitting
+              ? isEditing
+                ? 'Salvando…'
+                : 'Agendando…'
+              : isEditing
+                ? 'Salvar alterações'
+                : 'Criar agendamento'}
           </button>
         </footer>
       </form>

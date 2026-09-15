@@ -111,6 +111,8 @@ export function AgendaPage() {
   })
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [isBookingFormOpen, setIsBookingFormOpen] = useState(false)
+  const [bookingToEdit, setBookingToEdit] =
+    useState<AgendaBookingListItem | null>(null)
   const [bookingToConfirm, setBookingToConfirm] =
     useState<AgendaBookingListItem | null>(null)
   const [bookingToCancel, setBookingToCancel] =
@@ -168,6 +170,18 @@ export function AgendaPage() {
   function handleBookingCreated() {
     setIsBookingFormOpen(false)
     setSaveSuccess('Agendamento criado com sucesso.')
+    setLoadState({ status: 'loading' })
+    setLoadAttempt((attempt) => attempt + 1)
+  }
+
+  function openEditDialog(booking: AgendaBookingListItem) {
+    setSaveSuccess(null)
+    setBookingToEdit(booking)
+  }
+
+  function handleBookingUpdated() {
+    setBookingToEdit(null)
+    setSaveSuccess('Agendamento atualizado com sucesso.')
     setLoadState({ status: 'loading' })
     setLoadAttempt((attempt) => attempt + 1)
   }
@@ -342,6 +356,17 @@ export function AgendaPage() {
                     >
                       {details.label}
                     </span>
+                    {(booking.status === 'scheduled' ||
+                      booking.status === 'confirmed') && (
+                      <button
+                        className="booking-row__action"
+                        type="button"
+                        aria-label={`Editar agendamento de ${booking.client?.name ?? 'cliente indisponível'} em ${schedule.date}, ${schedule.time}`}
+                        onClick={() => openEditDialog(booking)}
+                      >
+                        Editar
+                      </button>
+                    )}
                     {booking.status === 'scheduled' && (
                       <button
                         className="booking-row__action"
@@ -390,6 +415,16 @@ export function AgendaPage() {
         <BookingDialog
           onClose={() => setIsBookingFormOpen(false)}
           onCreated={handleBookingCreated}
+        />
+      )}
+
+      {bookingToEdit && (
+        <BookingDialog
+          key={bookingToEdit.id}
+          booking={bookingToEdit}
+          onClose={() => setBookingToEdit(null)}
+          onUpdated={handleBookingUpdated}
+          onInvalidated={refreshInvalidatedBooking}
         />
       )}
 

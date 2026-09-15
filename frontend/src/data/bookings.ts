@@ -8,6 +8,10 @@ type CreateBookingArgs =
   Database['public']['Functions']['create_booking']['Args']
 type CreateBookingRow =
   Database['public']['Functions']['create_booking']['Returns'][number]
+type UpdateBookingArgs =
+  Database['public']['Functions']['update_booking']['Args']
+type UpdateBookingRow =
+  Database['public']['Functions']['update_booking']['Returns'][number]
 type ConfirmBookingArgs =
   Database['public']['Functions']['confirm_booking']['Args']
 type ConfirmBookingRow =
@@ -20,13 +24,15 @@ type MarkBookingNoShowArgs =
 type MarkBookingNoShowRow =
   Database['public']['Functions']['mark_booking_no_show']['Returns'][number]
 
-export type BookingClientOption = Pick<ClientRow, 'id' | 'name'>
+export type BookingClientOption = Pick<ClientRow, 'id' | 'name' | 'active'>
 export type BookingServiceOption = Pick<
   ServiceRow,
-  'id' | 'name' | 'estimated_duration_minutes'
+  'id' | 'name' | 'estimated_duration_minutes' | 'active'
 >
 export type CreateBookingInput = CreateBookingArgs
 export type CreatedBooking = CreateBookingRow
+export type UpdateBookingInput = UpdateBookingArgs
+export type UpdatedBooking = UpdateBookingRow
 export type ConfirmedBooking = ConfirmBookingRow
 export type CancelledBooking = CancelBookingRow
 export type NoShowBooking = MarkBookingNoShowRow
@@ -50,7 +56,9 @@ function agendaBookingsQuery() {
       ),
       booking_services (
         id,
-        service_name
+        service_id,
+        service_name,
+        estimated_duration_minutes
       )
     `)
     .order('starts_at', { ascending: true })
@@ -77,12 +85,21 @@ export interface BookingFormOptions {
   services: BookingServiceOption[]
 }
 
+export interface BookingEditOptionScope {
+  currentClientId?: ClientRow['id']
+  currentServiceIds: ServiceRow['id'][]
+}
+
 export type BookingFormOptionsResult =
   | { data: BookingFormOptions; error: null }
   | { data: null; error: BookingsDataError }
 
 export type CreateBookingResult =
   | { data: CreatedBooking; error: null }
+  | { data: null; error: BookingsDataError }
+
+export type UpdateBookingResult =
+  | { data: UpdatedBooking; error: null }
   | { data: null; error: BookingsDataError }
 
 export type ConfirmBookingResult =
@@ -116,18 +133,36 @@ export async function listBookings(): Promise<ListBookingsResult> {
   return { data, error: null }
 }
 
-export async function listBookingFormOptions(): Promise<BookingFormOptionsResult> {
+export async function listBookingFormOptions(
+  editScope?: BookingEditOptionScope,
+): Promise<BookingFormOptionsResult> {
+  const clientsQuery = supabase
+    .from('clients')
+    .select('id, name, active')
+
+  const servicesQuery = supabase
+    .from('services')
+    .select('id, name, estimated_duration_minutes, active')
+
+  const scopedClientsQuery =
+    editScope?.currentClientId === undefined
+      ? clientsQuery.eq('active', true)
+      : clientsQuery.or(
+          `active.eq.true,id.eq.${editScope.currentClientId}`,
+        )
+
+  const scopedServicesQuery =
+    editScope && editScope.currentServiceIds.length > 0
+      ? servicesQuery.or(
+          `active.eq.true,id.in.(${editScope.currentServiceIds.join(',')})`,
+        )
+      : servicesQuery.eq('active', true)
+
   const [clientsResult, servicesResult] = await Promise.all([
-    supabase
-      .from('clients')
-      .select('id, name')
-      .eq('active', true)
+    scopedClientsQuery
       .order('name', { ascending: true })
       .order('id', { ascending: true }),
-    supabase
-      .from('services')
-      .select('id, name, estimated_duration_minutes')
-      .eq('active', true)
+    scopedServicesQuery
       .order('name', { ascending: true })
       .order('id', { ascending: true }),
   ])
@@ -140,8 +175,8 @@ export async function listBookingFormOptions(): Promise<BookingFormOptionsResult
 
   return {
     data: {
-      clients: clientsResult.data,
-      services: servicesResult.data,
+      clients: clientsResult.data ?? [],
+      services: servicesResult.data ?? [],
     },
     error: null,
   }
@@ -151,6 +186,18 @@ export async function createBooking(
   input: CreateBookingInput,
 ): Promise<CreateBookingResult> {
   const { data, error } = await supabase.rpc('create_booking', input).single()
+
+  if (error) {
+    return { data: null, error: toBookingsDataError(error) }
+  }
+
+  return { data, error: null }
+}
+
+export async function updateBooking(
+  input: UpdateBookingInput,
+): Promise<UpdateBookingResult> {
+  const { data, error } = await supabase.rpc('update_booking', input).single()
 
   if (error) {
     return { data: null, error: toBookingsDataError(error) }

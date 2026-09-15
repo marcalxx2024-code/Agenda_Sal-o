@@ -1533,6 +1533,12 @@ a {
   cursor: not-allowed;
 }
 
+.booking-form__service-option--needs-removal {
+  border-color: #d7a7a2;
+  color: var(--danger);
+  background: #fff3f0;
+}
+
 .booking-form__service-option input {
   width: 17px;
   height: 17px;
@@ -1563,6 +1569,10 @@ a {
 
 .booking-form__service-option--unavailable small {
   color: #8b6565;
+}
+
+.booking-form__service-option--needs-removal small {
+  color: var(--danger);
 }
 
 .booking-form__empty-option {
