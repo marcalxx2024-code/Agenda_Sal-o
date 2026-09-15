@@ -2,11 +2,13 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   cancelBooking,
   confirmBooking,
+  markBookingNoShow,
   type AgendaBookingListItem,
   type BookingStatusChange,
   type BookingsDataError,
   type CancelledBooking,
   type ConfirmedBooking,
+  type NoShowBooking,
 } from '../data/bookings'
 
 interface BookingConfirmDialogProps {
@@ -23,7 +25,14 @@ interface BookingCancelDialogProps {
   onInvalidated: () => void
 }
 
-type BookingStatusAction = 'confirm' | 'cancel'
+interface BookingNoShowDialogProps {
+  booking: AgendaBookingListItem
+  onClose: () => void
+  onMarkedNoShow: (booking: NoShowBooking) => void
+  onInvalidated: () => void
+}
+
+type BookingStatusAction = 'confirm' | 'cancel' | 'no_show'
 
 interface BookingStatusDialogProps {
   action: BookingStatusAction
@@ -73,35 +82,72 @@ function actionCopy(action: BookingStatusAction, currentStatus: string) {
     }
   }
 
+  if (action === 'cancel') {
+    return {
+      title: 'Cancelar agendamento?',
+      description: `passará de ${
+        currentStatus === 'confirmed' ? 'Confirmado' : 'Agendado'
+      } para Cancelado. O horário ficará disponível para outro agendamento.`,
+      pendingLabel: 'Cancelando…',
+      submitLabel: 'Cancelar agendamento',
+    }
+  }
+
   return {
-    title: 'Cancelar agendamento?',
+    title: 'Registrar não comparecimento?',
     description: `passará de ${
       currentStatus === 'confirmed' ? 'Confirmado' : 'Agendado'
-    } para Cancelado. O horário ficará disponível para outro agendamento.`,
-    pendingLabel: 'Cancelando…',
-    submitLabel: 'Cancelar agendamento',
+    } para Não compareceu. O horário ficará disponível e nenhum atendimento ou retorno será criado.`,
+    pendingLabel: 'Registrando…',
+    submitLabel: 'Não compareceu',
   }
 }
+
+const actionLabels = {
+  confirm: {
+    permissionAction: 'confirmar agendamentos',
+    failureAction: 'confirmar o agendamento',
+    result: 'confirmado',
+    close: 'confirmação',
+  },
+  cancel: {
+    permissionAction: 'cancelar agendamentos',
+    failureAction: 'cancelar o agendamento',
+    result: 'cancelado',
+    close: 'cancelamento',
+  },
+  no_show: {
+    permissionAction: 'registrar não comparecimentos',
+    failureAction: 'registrar o não comparecimento',
+    result: 'marcado como não compareceu',
+    close: 'registro de não comparecimento',
+  },
+} as const
 
 function friendlyStatusError(
   error: BookingsDataError,
   action: BookingStatusAction,
 ) {
   const databaseMessage = error.message.toLocaleLowerCase('en-US')
-  const actionLabel = action === 'confirm' ? 'confirmado' : 'cancelado'
+  const labels = actionLabels[action]
 
   if (error.code === 'P0002') {
     return 'Este agendamento não existe mais. A agenda está sendo atualizada.'
   }
 
   if (error.code === '55000') {
-    return `O agendamento mudou de status e não pode mais ser ${actionLabel}. A agenda está sendo atualizada.`
+    if (
+      action === 'no_show' &&
+      databaseMessage.includes('before starts_at')
+    ) {
+      return 'O horário de início ainda não chegou segundo o relógio do salão. A agenda está sendo atualizada.'
+    }
+
+    return `O agendamento mudou de status e não pode mais ser ${labels.result}. A agenda está sendo atualizada.`
   }
 
   if (error.code === '42501' || error.code.startsWith('PGRST3')) {
-    return `Sua sessão não possui permissão para ${
-      action === 'confirm' ? 'confirmar' : 'cancelar'
-    } agendamentos.`
+    return `Sua sessão não possui permissão para ${labels.permissionAction}.`
   }
 
   if (error.code === '22023') {
@@ -120,9 +166,7 @@ function friendlyStatusError(
     return 'Não foi possível conectar ao serviço. Verifique sua conexão e tente novamente.'
   }
 
-  return `Não foi possível ${
-    action === 'confirm' ? 'confirmar' : 'cancelar'
-  } o agendamento. Tente novamente.`
+  return `Não foi possível ${labels.failureAction}. Tente novamente.`
 }
 
 function unexpectedStatusError(error: unknown) {
@@ -167,7 +211,9 @@ function BookingStatusDialog({
       const result =
         action === 'confirm'
           ? await confirmBooking(booking.id)
-          : await cancelBooking(booking.id)
+          : action === 'cancel'
+            ? await cancelBooking(booking.id)
+            : await markBookingNoShow(booking.id)
 
       if (result.error) {
         const invalidated = [
@@ -225,9 +271,7 @@ function BookingStatusDialog({
           <button
             className="client-dialog__close"
             type="button"
-            aria-label={
-              action === 'confirm' ? 'Fechar confirmação' : 'Fechar cancelamento'
-            }
+            aria-label={`Fechar ${actionLabels[action].close}`}
             onClick={closeDialog}
             disabled={isSubmitting}
           >
@@ -298,6 +342,23 @@ export function BookingCancelDialog({
       booking={booking}
       onClose={onClose}
       onChanged={onCancelled}
+      onInvalidated={onInvalidated}
+    />
+  )
+}
+
+export function BookingNoShowDialog({
+  booking,
+  onClose,
+  onMarkedNoShow,
+  onInvalidated,
+}: BookingNoShowDialogProps) {
+  return (
+    <BookingStatusDialog
+      action="no_show"
+      booking={booking}
+      onClose={onClose}
+      onChanged={onMarkedNoShow}
       onInvalidated={onInvalidated}
     />
   )

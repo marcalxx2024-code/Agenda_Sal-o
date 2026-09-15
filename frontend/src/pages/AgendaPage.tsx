@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   BookingCancelDialog,
   BookingConfirmDialog,
+  BookingNoShowDialog,
 } from '../components/BookingConfirmDialog'
 import { BookingDialog } from '../components/BookingDialog'
 import {
@@ -11,6 +12,7 @@ import {
   type BookingsDataError,
   type CancelledBooking,
   type ConfirmedBooking,
+  type NoShowBooking,
 } from '../data/bookings'
 
 type AgendaLoadState =
@@ -91,6 +93,18 @@ function statusDetails(status: string) {
   )
 }
 
+function canMarkBookingNoShow(
+  booking: AgendaBookingListItem,
+  currentTime: number,
+) {
+  if (booking.status !== 'scheduled' && booking.status !== 'confirmed') {
+    return false
+  }
+
+  const startsAt = validDate(booking.starts_at)
+  return startsAt !== null && startsAt.getTime() <= currentTime
+}
+
 export function AgendaPage() {
   const [loadState, setLoadState] = useState<AgendaLoadState>({
     status: 'loading',
@@ -101,7 +115,18 @@ export function AgendaPage() {
     useState<AgendaBookingListItem | null>(null)
   const [bookingToCancel, setBookingToCancel] =
     useState<AgendaBookingListItem | null>(null)
+  const [bookingToMarkNoShow, setBookingToMarkNoShow] =
+    useState<AgendaBookingListItem | null>(null)
+  const [currentTime, setCurrentTime] = useState(() => Date.now())
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setCurrentTime(Date.now())
+    }, 30_000)
+
+    return () => window.clearInterval(intervalId)
+  }, [])
 
   useEffect(() => {
     let isCurrent = true
@@ -183,6 +208,17 @@ export function AgendaPage() {
     setBookingToCancel(null)
     setSaveSuccess('Agendamento cancelado com sucesso.')
     reflectBookingStatus(cancelledBooking)
+  }
+
+  function openNoShowDialog(booking: AgendaBookingListItem) {
+    setSaveSuccess(null)
+    setBookingToMarkNoShow(booking)
+  }
+
+  function handleBookingMarkedNoShow(noShowBooking: NoShowBooking) {
+    setBookingToMarkNoShow(null)
+    setSaveSuccess('Não comparecimento registrado com sucesso.')
+    reflectBookingStatus(noShowBooking)
   }
 
   function refreshInvalidatedBooking() {
@@ -327,6 +363,16 @@ export function AgendaPage() {
                         Cancelar
                       </button>
                     )}
+                    {canMarkBookingNoShow(booking, currentTime) && (
+                      <button
+                        className="booking-row__action"
+                        type="button"
+                        aria-label={`Registrar não comparecimento de ${booking.client?.name ?? 'cliente indisponível'} em ${schedule.date}, ${schedule.time}`}
+                        onClick={() => openNoShowDialog(booking)}
+                      >
+                        Não compareceu
+                      </button>
+                    )}
                   </div>
                   {notes && (
                     <p className="booking-row__notes">
@@ -363,6 +409,16 @@ export function AgendaPage() {
           booking={bookingToCancel}
           onClose={() => setBookingToCancel(null)}
           onCancelled={handleBookingCancelled}
+          onInvalidated={refreshInvalidatedBooking}
+        />
+      )}
+
+      {bookingToMarkNoShow && (
+        <BookingNoShowDialog
+          key={bookingToMarkNoShow.id}
+          booking={bookingToMarkNoShow}
+          onClose={() => setBookingToMarkNoShow(null)}
+          onMarkedNoShow={handleBookingMarkedNoShow}
           onInvalidated={refreshInvalidatedBooking}
         />
       )}
