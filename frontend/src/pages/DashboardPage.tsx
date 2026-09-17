@@ -1,18 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { loadDashboard, type DashboardData } from '../data/dashboard'
+import { formatDateOnly, salonDateTimeFormatter } from '../lib/salon-time'
 
 type DashboardState =
   | { status: 'loading' }
   | { status: 'error' }
   | { status: 'loaded'; data: DashboardData }
 
-const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
-  day: '2-digit',
-  month: 'short',
-  year: 'numeric',
-})
-const dayFormatter = new Intl.DateTimeFormat('pt-BR', {
+const dayFormatter = salonDateTimeFormatter({
   day: '2-digit',
   month: 'short',
   hour: '2-digit',
@@ -208,9 +204,11 @@ export function DashboardPage() {
                       {appointment.client?.name ?? 'Cliente indisponível'}
                     </strong>
                     <span>
-                      {dateFormatter.format(
-                        new Date(`${appointment.performed_on}T12:00:00Z`),
-                      )}
+                      {formatDateOnly(appointment.performed_on, {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
                     </span>
                   </div>
                   <span className="booking-status booking-status--completed">

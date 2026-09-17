@@ -19,7 +19,7 @@ export interface ReturnsDataError {
 }
 
 export type ListPendingReturnsResult =
-  | { data: PendingReturn[]; error: null }
+  | { data: PendingReturn[]; hasMore: boolean; error: null }
   | { data: null; error: ReturnsDataError }
 
 export type MarkReturnContactedResult =
@@ -39,7 +39,10 @@ function toReturnsDataError(error: PostgrestError): ReturnsDataError {
   }
 }
 
-export async function listPendingReturns(): Promise<ListPendingReturnsResult> {
+export async function listPendingReturns(
+  offset = 0,
+  pageSize = 30,
+): Promise<ListPendingReturnsResult> {
   const { data, error } = await supabase
     .from('pending_returns')
     .select(
@@ -47,13 +50,13 @@ export async function listPendingReturns(): Promise<ListPendingReturnsResult> {
     )
     .order('due_on', { ascending: true })
     .order('id', { ascending: true })
-    .limit(200)
+    .range(offset, offset + pageSize - 1)
 
   if (error) {
     return { data: null, error: toReturnsDataError(error) }
   }
 
-  return { data, error: null }
+  return { data, hasMore: data.length === pageSize, error: null }
 }
 
 export async function markReturnContacted(

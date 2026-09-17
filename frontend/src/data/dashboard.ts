@@ -1,5 +1,10 @@
 import type { PostgrestError } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import {
+  addDaysToDateValue,
+  salonDateRange,
+  salonDateValue,
+} from '../lib/salon-time'
 
 export interface DashboardBooking {
   id: number
@@ -45,20 +50,11 @@ function toDashboardError(error: PostgrestError): DashboardDataError {
   }
 }
 
-function localDayBounds() {
-  const start = new Date()
-  start.setHours(0, 0, 0, 0)
-  const end = new Date(start)
-  end.setDate(end.getDate() + 1)
-  return { start: start.toISOString(), end: end.toISOString() }
-}
-
 export async function loadDashboard(): Promise<DashboardResult> {
-  const today = localDayBounds()
+  const salonToday = salonDateValue()
+  const today = salonDateRange(salonToday, salonToday)
   const now = new Date().toISOString()
-  const recentStart = new Date()
-  recentStart.setDate(recentStart.getDate() - 30)
-  const recentStartDate = recentStart.toISOString().slice(0, 10)
+  const recentStartDate = addDaysToDateValue(salonToday, -30)
 
   const [
     todayResult,
@@ -73,8 +69,8 @@ export async function loadDashboard(): Promise<DashboardResult> {
     supabase
       .from('bookings')
       .select('*', { count: 'exact', head: true })
-      .gte('starts_at', today.start)
-      .lt('starts_at', today.end)
+      .gte('starts_at', today.start ?? now)
+      .lt('starts_at', today.end ?? now)
       .in('status', ['scheduled', 'confirmed']),
     supabase
       .from('bookings')

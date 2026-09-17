@@ -10,6 +10,7 @@ import {
   type ConfirmedBooking,
   type NoShowBooking,
 } from '../data/bookings'
+import { salonDateTimeFormatter } from '../lib/salon-time'
 
 interface BookingConfirmDialogProps {
   booking: AgendaBookingListItem
@@ -53,13 +54,13 @@ type StatusSubmissionState =
       invalidated: boolean
     }
 
-const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
+const dateFormatter = salonDateTimeFormatter({
   day: '2-digit',
   month: 'long',
   year: 'numeric',
 })
 
-const timeFormatter = new Intl.DateTimeFormat('pt-BR', {
+const timeFormatter = salonDateTimeFormatter({
   hour: '2-digit',
   minute: '2-digit',
 })

@@ -6,19 +6,18 @@ import {
   type PendingReturn,
   type ReturnsDataError,
 } from '../data/returns'
+import {
+  formatDateOnly,
+  salonDateTimeFormatter,
+  salonDateValue,
+} from '../lib/salon-time'
 
 type ReturnsState =
   | { status: 'loading' }
   | { status: 'error'; error: ReturnsDataError | null }
-  | { status: 'loaded'; returns: PendingReturn[] }
+  | { status: 'loaded'; returns: PendingReturn[]; hasMore: boolean }
 
-const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
-  day: '2-digit',
-  month: 'short',
-  year: 'numeric',
-  timeZone: 'UTC',
-})
-const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+const dateTimeFormatter = salonDateTimeFormatter({
   day: '2-digit',
   month: 'short',
   year: 'numeric',
@@ -28,18 +27,20 @@ const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
 
 function formatDate(value: string | null) {
   if (!value) return 'Data indisponível'
-  const date = new Date(`${value}T12:00:00Z`)
-  return Number.isNaN(date.getTime())
-    ? 'Data indisponível'
-    : dateFormatter.format(date)
+  return formatDateOnly(value, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
 }
 
 function dueTone(dueOn: string | null) {
   if (!dueOn) return { label: 'Sem data', tone: 'future' }
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const due = new Date(`${dueOn}T00:00:00`)
-  const days = Math.round((due.getTime() - today.getTime()) / 86_400_000)
+  const today = salonDateValue()
+  const days = Math.round(
+    (Date.parse(`${dueOn}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) /
+      86_400_000,
+  )
   if (days < 0) return { label: 'Atrasado', tone: 'overdue' }
   if (days <= 30) return { label: 'Próximo', tone: 'soon' }
   return { label: 'Futuro', tone: 'future' }
@@ -206,6 +207,8 @@ export function ReturnsPage() {
     action: ReturnActionDialogProps['action']
   } | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
 
   useEffect(() => {
     let isCurrent = true
@@ -215,7 +218,11 @@ export function ReturnsPage() {
         setState(
           result.error
             ? { status: 'error', error: result.error }
-            : { status: 'loaded', returns: result.data },
+            : {
+                status: 'loaded',
+                returns: result.data,
+                hasMore: result.hasMore,
+              },
         )
       })
       .catch(() => {
@@ -231,6 +238,28 @@ export function ReturnsPage() {
   function reload() {
     setState({ status: 'loading' })
     setLoadAttempt((attempt) => attempt + 1)
+  }
+
+  async function loadMore() {
+    if (state.status !== 'loaded' || isLoadingMore || !state.hasMore) return
+    setIsLoadingMore(true)
+    setLoadMoreError(null)
+    try {
+      const result = await listPendingReturns(state.returns.length)
+      if (result.error) {
+        setLoadMoreError('Não foi possível carregar retornos mais distantes.')
+      } else {
+        setState({
+          status: 'loaded',
+          returns: [...state.returns, ...result.data],
+          hasMore: result.hasMore,
+        })
+      }
+    } catch {
+      setLoadMoreError('Não foi possível carregar retornos mais distantes.')
+    } finally {
+      setIsLoadingMore(false)
+    }
   }
 
   return (
@@ -363,6 +392,19 @@ export function ReturnsPage() {
           })}
         </ul>
       )}
+      {state.status === 'loaded' && state.hasMore && (
+        <div className="records-load-more">
+          <button
+            className="primary-button"
+            type="button"
+            onClick={loadMore}
+            disabled={isLoadingMore}
+          >
+            {isLoadingMore ? 'Carregando…' : 'Carregar mais'}
+          </button>
+        </div>
+      )}
+      {loadMoreError && <p className="form-error" role="alert">{loadMoreError}</p>}
 
       {selected && (
         <ReturnActionDialog

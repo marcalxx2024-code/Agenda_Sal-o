@@ -33,6 +33,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     null,
   )
   const [authorizationAttempt, setAuthorizationAttempt] = useState(0)
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(() =>
+    `${window.location.search}${window.location.hash}`.includes('type=recovery'),
+  )
 
   useEffect(() => {
     let isMounted = true
@@ -56,8 +59,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!isMounted) return
+      if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true)
       applySession(nextSession)
       setIsRestoringSession(false)
     })
@@ -100,6 +104,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isRestoringSession,
       authorizationStatus,
       authorizationError,
+      isPasswordRecovery,
       retryAuthorization() {
         setAuthorizationStatus('loading')
         setAuthorizationError(null)
@@ -113,6 +118,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         return { error: error ? friendlyAuthError(error.message) : null }
       },
+      async requestPasswordReset(
+        email: string,
+        redirectTo: string,
+      ): Promise<AuthActionResult> {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo,
+        })
+        return {
+          error: error
+            ? 'Não foi possível enviar o link de recuperação. Verifique o e-mail e tente novamente.'
+            : null,
+        }
+      },
+      async updatePassword(password: string): Promise<AuthActionResult> {
+        const { error } = await supabase.auth.updateUser({ password })
+        if (!error) setIsPasswordRecovery(false)
+        return {
+          error: error
+            ? 'Não foi possível definir a nova senha. Solicite outro link e tente novamente.'
+            : null,
+        }
+      },
       async signOut(): Promise<AuthActionResult> {
         const { error } = await supabase.auth.signOut()
 
@@ -123,7 +150,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       },
     }),
-    [authorizationError, authorizationStatus, isRestoringSession, session],
+    [
+      authorizationError,
+      authorizationStatus,
+      isPasswordRecovery,
+      isRestoringSession,
+      session,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

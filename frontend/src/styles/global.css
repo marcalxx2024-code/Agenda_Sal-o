@@ -262,6 +262,21 @@ a {
   gap: 21px;
 }
 
+.login-link-button {
+  justify-self: center;
+  padding: 6px;
+  border: 0;
+  color: var(--rose-deep);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.login-link-button:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
 .field {
   display: grid;
   gap: 8px;
@@ -2284,6 +2299,120 @@ a {
 
 /* Operational completion, filters, history and returns */
 
+.records-load-more {
+  display: flex;
+  justify-content: center;
+}
+
+.reset-password-card {
+  width: min(100%, 440px);
+}
+
+.reset-password-link {
+  display: inline-flex;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.settings-panel {
+  display: grid;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  gap: 18px;
+}
+
+.business-hours-list,
+.schedule-block-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  gap: 10px;
+}
+
+.business-hour-row {
+  display: grid;
+  grid-template-columns: 115px repeat(2, minmax(105px, 1fr)) 105px repeat(2, minmax(105px, 1fr));
+  align-items: end;
+  padding: 14px;
+  border: 1px solid #e3d9d0;
+  border-radius: 10px;
+  gap: 10px;
+}
+
+.business-hour-row legend {
+  padding: 0 5px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.business-hour-row label,
+.schedule-block-form label {
+  display: grid;
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 750;
+  gap: 5px;
+}
+
+.business-hour-row input[type='time'],
+.schedule-block-form input {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 9px;
+  border: 1px solid #d8cec5;
+  border-radius: 8px;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+}
+
+.business-hour-row .settings-check {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 7px;
+}
+
+.schedule-block-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr minmax(180px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.schedule-block-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 0;
+  border-top: 1px solid #eee6de;
+  gap: 16px;
+}
+
+.schedule-block-list li > div {
+  display: grid;
+  gap: 4px;
+}
+
+.schedule-block-list span,
+.settings-empty {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.schedule-block-list button {
+  padding: 7px 10px;
+  border: 1px solid #e2c7c7;
+  border-radius: 7px;
+  color: var(--danger);
+  background: #fffafa;
+  font-weight: 750;
+}
+
 .agenda-filters {
   display: grid;
   padding: 16px;
@@ -2683,7 +2812,7 @@ a {
 
 @media (max-width: 700px) {
   .mobile-nav {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(7, 1fr);
   }
 
   .records-page__heading,
@@ -2743,6 +2872,19 @@ a {
   }
 
   .booking-client-create__actions > button {
+    width: 100%;
+  }
+
+  .business-hour-row,
+  .schedule-block-form {
+    grid-template-columns: 1fr;
+  }
+
+  .business-hour-row {
+    align-items: stretch;
+  }
+
+  .schedule-block-form .primary-button {
     width: 100%;
   }
 }

@@ -199,6 +199,39 @@ export type Database = {
           },
         ]
       }
+      business_hours: {
+        Row: {
+          break_ends_at: string | null
+          break_starts_at: string | null
+          closes_at: string | null
+          created_at: string
+          is_open: boolean
+          opens_at: string | null
+          updated_at: string
+          weekday: number
+        }
+        Insert: {
+          break_ends_at?: string | null
+          break_starts_at?: string | null
+          closes_at?: string | null
+          created_at?: string
+          is_open?: boolean
+          opens_at?: string | null
+          updated_at?: string
+          weekday: number
+        }
+        Update: {
+          break_ends_at?: string | null
+          break_starts_at?: string | null
+          closes_at?: string | null
+          created_at?: string
+          is_open?: boolean
+          opens_at?: string | null
+          updated_at?: string
+          weekday?: number
+        }
+        Relationships: []
+      }
       clients: {
         Row: {
           active: boolean
@@ -269,6 +302,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      schedule_blocks: {
+        Row: {
+          created_at: string
+          ends_at: string
+          id: number
+          reason: string | null
+          starts_at: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          ends_at: string
+          id?: number
+          reason?: string | null
+          starts_at: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          ends_at?: string
+          id?: number
+          reason?: string | null
+          starts_at?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       services: {
         Row: {

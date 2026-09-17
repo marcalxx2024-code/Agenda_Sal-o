@@ -36,7 +36,7 @@ export interface AppointmentsDataError {
 }
 
 export type ListAppointmentsResult =
-  | { data: AppointmentListItem[]; error: null }
+  | { data: AppointmentListItem[]; hasMore: boolean; error: null }
   | { data: null; error: AppointmentsDataError }
 
 function toAppointmentsDataError(
@@ -52,16 +52,18 @@ function toAppointmentsDataError(
 
 export async function listAppointments(
   clientId?: number,
+  offset = 0,
+  pageSize = 30,
 ): Promise<ListAppointmentsResult> {
   let query = appointmentsQuery()
 
   if (clientId !== undefined) query = query.eq('client_id', clientId)
 
-  const { data, error } = await query.limit(200)
+  const { data, error } = await query.range(offset, offset + pageSize - 1)
 
   if (error) {
     return { data: null, error: toAppointmentsDataError(error) }
   }
 
-  return { data, error: null }
+  return { data, hasMore: data.length === pageSize, error: null }
 }

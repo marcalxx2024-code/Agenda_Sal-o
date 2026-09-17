@@ -7,6 +7,11 @@ import {
   type CompletedBooking,
   type CompletionServiceOption,
 } from '../data/bookings'
+import {
+  isoToSalonInputValues,
+  salonDateTimeFormatter,
+  salonDateValue,
+} from '../lib/salon-time'
 
 interface BookingCompleteDialogProps {
   booking: AgendaBookingListItem
@@ -20,13 +25,6 @@ type OptionsState =
   | { status: 'error' }
   | { status: 'loaded'; services: CompletionServiceOption[] }
 
-function localDateValue(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
 function friendlyCompletionError(error: BookingsDataError) {
   const message = error.message.toLocaleLowerCase('en-US')
 
@@ -37,8 +35,11 @@ function friendlyCompletionError(error: BookingsDataError) {
     return 'Sua sessão não possui permissão para concluir atendimentos.'
   }
   if (error.code === '55000') {
+    if (message.includes('before starts_at')) {
+      return 'O horário agendado ainda não chegou segundo o relógio do salão.'
+    }
     if (message.includes('client')) {
-      return 'A cliente está inativa. Reative o cadastro antes de concluir este atendimento.'
+      return 'Não foi possível validar a cliente vinculada ao atendimento.'
     }
     if (message.includes('status')) {
       return 'O agendamento mudou de status e não pode mais ser concluído.'
@@ -57,13 +58,13 @@ function friendlyCompletionError(error: BookingsDataError) {
   return 'Não foi possível concluir o atendimento. Tente novamente.'
 }
 
-const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
+const dateFormatter = salonDateTimeFormatter({
   day: '2-digit',
   month: 'long',
   year: 'numeric',
 })
 
-const timeFormatter = new Intl.DateTimeFormat('pt-BR', {
+const timeFormatter = salonDateTimeFormatter({
   hour: '2-digit',
   minute: '2-digit',
 })
@@ -82,12 +83,13 @@ export function BookingCompleteDialog({
   )
   const scheduledDate = new Date(booking.starts_at)
   const [openedAt] = useState(() => Date.now())
-  const today = localDateValue(new Date())
+  const today = salonDateValue()
+  const scheduledSalonDate = isoToSalonInputValues(booking.starts_at).date
   const isScheduledInFuture =
     !Number.isNaN(scheduledDate.getTime()) && scheduledDate.getTime() > openedAt
   const [performedOn, setPerformedOn] = useState(
-    !Number.isNaN(scheduledDate.getTime()) && localDateValue(scheduledDate) <= today
-      ? localDateValue(scheduledDate)
+    scheduledSalonDate && scheduledSalonDate <= today
+      ? scheduledSalonDate
       : today,
   )
   const [selectedServiceIds, setSelectedServiceIds] =

@@ -17,6 +17,7 @@ const navigation: NavigationItem[] = [
   { label: 'Serviços', path: '/servicos', icon: 'services' },
   { label: 'Histórico', path: '/historico', icon: 'history' },
   { label: 'Retornos', path: '/retornos', icon: 'returns' },
+  { label: 'Config.', path: '/configuracoes', icon: 'settings' },
 ]
 
 const pageTitles: Record<string, string> = {
@@ -26,6 +27,7 @@ const pageTitles: Record<string, string> = {
   '/servicos': 'Serviços',
   '/historico': 'Histórico',
   '/retornos': 'Retornos',
+  '/configuracoes': 'Configurações',
 }
 
 export function AppShell() {

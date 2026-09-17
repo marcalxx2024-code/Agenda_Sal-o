@@ -16,6 +16,12 @@ import {
   type CompletedBooking,
   type NoShowBooking,
 } from '../data/bookings'
+import {
+  addDaysToDateValue,
+  salonDateRange,
+  salonDateTimeFormatter,
+  salonDateValue,
+} from '../lib/salon-time'
 
 type AgendaLoadState =
   | { status: 'loading' }
@@ -30,14 +36,14 @@ const bookingStatus = {
   no_show: { label: 'Não compareceu', tone: 'no-show' },
 } as const
 
-const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
+const dateFormatter = salonDateTimeFormatter({
   weekday: 'short',
   day: '2-digit',
   month: 'short',
   year: 'numeric',
 })
 
-const timeFormatter = new Intl.DateTimeFormat('pt-BR', {
+const timeFormatter = salonDateTimeFormatter({
   hour: '2-digit',
   minute: '2-digit',
 })
@@ -46,30 +52,16 @@ function bookingCountLabel(count: number) {
   return `${count} ${count === 1 ? 'agendamento' : 'agendamentos'}`
 }
 
-function localDateValue(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
 function initialPeriod() {
-  const start = new Date()
-  start.setHours(0, 0, 0, 0)
-  const end = new Date(start)
-  end.setDate(end.getDate() + 29)
-  return { from: localDateValue(start), to: localDateValue(end) }
+  const from = salonDateValue()
+  return { from, to: addDaysToDateValue(from, 29) }
 }
 
 function periodToQuery(from: string, to: string, status: string) {
-  const start = from ? new Date(`${from}T00:00:00`) : null
-  const end = to ? new Date(`${to}T00:00:00`) : null
-  if (end) end.setDate(end.getDate() + 1)
+  const range = salonDateRange(from, to)
   return {
-    ...(start && !Number.isNaN(start.getTime())
-      ? { from: start.toISOString() }
-      : {}),
-    ...(end && !Number.isNaN(end.getTime()) ? { to: end.toISOString() } : {}),
+    ...(range.start ? { from: range.start } : {}),
+    ...(range.end ? { to: range.end } : {}),
     ...(status ? { status } : {}),
   }
 }
@@ -305,12 +297,8 @@ export function AgendaPage() {
   }
 
   function applyQuickPeriod(totalDays: number) {
-    const start = new Date()
-    start.setHours(0, 0, 0, 0)
-    const end = new Date(start)
-    end.setDate(end.getDate() + totalDays - 1)
-    const from = localDateValue(start)
-    const to = localDateValue(end)
+    const from = salonDateValue()
+    const to = addDaysToDateValue(from, totalDays - 1)
     setFilterFrom(from)
     setFilterTo(to)
     setLoadState({ status: 'loading' })

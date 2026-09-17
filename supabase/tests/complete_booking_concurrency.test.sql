@@ -4,11 +4,48 @@ create extension if not exists pgtap with schema extensions;
 create extension if not exists dblink with schema extensions;
 select plan(4);
 
+create function pg_temp.shift_concurrency_fixture_to_past()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.status in ('scheduled', 'confirmed')
+     and new.starts_at > statement_timestamp() then
+    update public.bookings
+    set starts_at = new.starts_at - interval '100 years',
+        ends_at = new.ends_at - interval '100 years'
+    where id = new.id;
+  end if;
+  return null;
+end;
+$$;
+
+create trigger complete_concurrency_test_make_due
+after insert on public.bookings
+for each row execute function pg_temp.shift_concurrency_fixture_to_past();
+
+-- Recover cleanly when a previous local run was interrupted before cleanup.
+delete from public.appointments
+where booking_id in (
+  select id from public.bookings where notes = 'Booking Concorrencia Complete'
+);
+delete from public.booking_services
+where booking_id in (
+  select id from public.bookings where notes = 'Booking Concorrencia Complete'
+);
+delete from public.bookings where notes = 'Booking Concorrencia Complete';
+delete from public.services where name = 'Servico Concorrencia Complete';
+delete from public.clients where name = 'Cliente Concorrencia Complete';
+
 insert into auth.users (id, email)
-values ('f0000000-0000-4000-8000-00000000000f', 'complete.concurrent@example.test');
+values ('f0000000-0000-4000-8000-00000000000f', 'complete.concurrent@example.test')
+on conflict (id) do update set email = excluded.email;
 
 insert into agenda_salao_private.salon_users (user_id)
-values ('f0000000-0000-4000-8000-00000000000f');
+values ('f0000000-0000-4000-8000-00000000000f')
+on conflict (user_id) do nothing;
 
 insert into public.clients (name, phone)
 values ('Cliente Concorrencia Complete', '+55 11 96666-0001');
@@ -40,6 +77,8 @@ where b.notes = 'Booking Concorrencia Complete'
 
 -- Keep the first transaction inside the critical section long enough for the
 -- second request to reach the same row lock.
+drop trigger if exists test_pause_booking_completion on public.appointments;
+drop function if exists agenda_salao_private.test_pause_booking_completion();
 create or replace function agenda_salao_private.test_pause_booking_completion()
 returns trigger
 language plpgsql

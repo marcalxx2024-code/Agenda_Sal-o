@@ -9,23 +9,36 @@ interface LoginLocationState {
 }
 
 export function LoginPage() {
-  const { signIn } = useAuth()
+  const { requestPasswordReset, signIn } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isRecovering, setIsRecovering] = useState(false)
+  const [success, setSuccess] = useState<string | null>(null)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
     setIsSubmitting(true)
 
-    const result = await signIn(email.trim(), password)
+    const result = isRecovering
+      ? await requestPasswordReset(
+          email.trim(),
+          `${window.location.origin}/reset-password`,
+        )
+      : await signIn(email.trim(), password)
 
     if (result.error) {
       setError(result.error)
+      setIsSubmitting(false)
+      return
+    }
+
+    if (isRecovering) {
+      setSuccess('Se o e-mail estiver cadastrado, você receberá um link para definir uma nova senha.')
       setIsSubmitting(false)
       return
     }
@@ -69,9 +82,11 @@ export function LoginPage() {
           </div>
 
           <span className="eyebrow">Acesso reservado</span>
-          <h2>Bem-vinda de volta</h2>
+          <h2>{isRecovering ? 'Recuperar senha' : 'Bem-vinda de volta'}</h2>
           <p className="login-card__intro">
-            Entre com a conta autorizada do salão para acessar a agenda.
+            {isRecovering
+              ? 'Informe o e-mail da conta para receber o link de recuperação.'
+              : 'Entre com a conta autorizada do salão para acessar a agenda.'}
           </p>
 
           <form className="login-form" onSubmit={handleSubmit} noValidate>
@@ -93,7 +108,10 @@ export function LoginPage() {
               />
             </div>
 
-            <div className="field">
+            {success && <p className="agenda-success" role="status">{success}</p>}
+
+            {!isRecovering && (
+              <div className="field">
               <label htmlFor="password">Senha</label>
               <input
                 id="password"
@@ -108,7 +126,8 @@ export function LoginPage() {
                 aria-invalid={Boolean(error)}
                 disabled={isSubmitting}
               />
-            </div>
+              </div>
+            )}
 
             {error && (
               <p className="form-error" id="login-error" role="alert">
@@ -119,9 +138,23 @@ export function LoginPage() {
             <button
               className="primary-button"
               type="submit"
-              disabled={isSubmitting || !email.trim() || !password}
+              disabled={isSubmitting || !email.trim() || (!isRecovering && !password)}
             >
-              {isSubmitting ? 'Entrando…' : 'Entrar'}
+              {isSubmitting
+                ? isRecovering ? 'Enviando…' : 'Entrando…'
+                : isRecovering ? 'Enviar link de recuperação' : 'Entrar'}
+            </button>
+            <button
+              className="login-link-button"
+              type="button"
+              disabled={isSubmitting}
+              onClick={() => {
+                setIsRecovering((current) => !current)
+                setError(null)
+                setSuccess(null)
+              }}
+            >
+              {isRecovering ? 'Voltar ao login' : 'Esqueci minha senha'}
             </button>
           </form>
 

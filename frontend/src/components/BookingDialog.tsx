@@ -18,6 +18,11 @@ import {
   type UpdateBookingInput,
   type UpdatedBooking,
 } from '../data/bookings'
+import {
+  isoToSalonInputValues,
+  salonDateTimeToIso,
+  salonDateValue,
+} from '../lib/salon-time'
 
 interface BookingDialogBaseProps {
   onClose: () => void
@@ -98,32 +103,6 @@ function durationLabel(durationMinutes: number) {
   return minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`
 }
 
-function todayInputValue() {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function bookingDateTimeInputValues(startsAt?: string) {
-  if (!startsAt) return { date: '', time: '' }
-
-  const parsedStartsAt = new Date(startsAt)
-  if (Number.isNaN(parsedStartsAt.getTime())) return { date: '', time: '' }
-
-  const year = parsedStartsAt.getFullYear()
-  const month = String(parsedStartsAt.getMonth() + 1).padStart(2, '0')
-  const day = String(parsedStartsAt.getDate()).padStart(2, '0')
-  const hours = String(parsedStartsAt.getHours()).padStart(2, '0')
-  const minutes = String(parsedStartsAt.getMinutes()).padStart(2, '0')
-
-  return {
-    date: `${year}-${month}-${day}`,
-    time: `${hours}:${minutes}`,
-  }
-}
-
 function bookingManualDurationInput(booking?: AgendaBookingListItem) {
   if (!booking) return ''
 
@@ -180,17 +159,17 @@ function validateBookingForm(
   if (!date) errors.date = 'Informe a data.'
   if (!time) errors.time = 'Informe o horário de início.'
 
-  let startsAt: Date | null = null
+  let startsAtIso: string | null = null
 
   if (date && time) {
-    const parsedStartsAt = new Date(`${date}T${time}`)
+    const parsedStartsAtIso = salonDateTimeToIso(date, time)
 
-    if (Number.isNaN(parsedStartsAt.getTime())) {
+    if (!parsedStartsAtIso) {
       errors.startsAt = 'Informe uma data e um horário válidos.'
-    } else if (parsedStartsAt.getTime() <= Date.now()) {
+    } else if (new Date(parsedStartsAtIso).getTime() <= Date.now()) {
       errors.startsAt = 'O início do agendamento deve estar no futuro.'
     } else {
-      startsAt = parsedStartsAt
+      startsAtIso = parsedStartsAtIso
     }
   }
 
@@ -225,7 +204,7 @@ function validateBookingForm(
     }
   }
 
-  if (Object.keys(errors).length > 0 || !selectedClient || !startsAt) {
+  if (Object.keys(errors).length > 0 || !selectedClient || !startsAtIso) {
     return { input: null, errors }
   }
 
@@ -233,7 +212,7 @@ function validateBookingForm(
   const input: CreateBookingInput = {
     p_client_id: selectedClient.id,
     p_service_ids: selectedServiceIds,
-    p_starts_at: startsAt.toISOString(),
+    p_starts_at: startsAtIso,
   }
 
   if (parsedDuration !== undefined) {
@@ -250,11 +229,26 @@ function validateBookingForm(
 function friendlySaveError(error: BookingsDataError, isEditing: boolean) {
   const databaseMessage = error.message.toLocaleLowerCase('en-US')
 
+  if (error.code === 'P0001') {
+    if (databaseMessage.includes('schedule block')) {
+      return 'Esse horário está bloqueado nas configurações da agenda.'
+    }
+    if (databaseMessage.includes('business break')) {
+      return 'Esse horário coincide com o intervalo do salão.'
+    }
+  }
+
   if (error.code === 'P0002') {
     return 'Este agendamento não existe mais. A agenda está sendo atualizada.'
   }
 
   if (error.code === '23P01') {
+    if (databaseMessage.includes('schedule block')) {
+      return 'Esse horário está bloqueado nas configurações da agenda.'
+    }
+    if (databaseMessage.includes('business break')) {
+      return 'Esse horário coincide com o intervalo do salão.'
+    }
     return 'Esse horário conflita com outro agendamento ativo. Escolha outro horário.'
   }
 
@@ -311,6 +305,15 @@ function friendlySaveError(error: BookingsDataError, isEditing: boolean) {
   }
 
   if (error.code === '23514') {
+    if (databaseMessage.includes('closed')) {
+      return 'O salão está fechado no dia selecionado.'
+    }
+    if (databaseMessage.includes('outside business hours')) {
+      return 'O horário está fora do expediente configurado.'
+    }
+    if (databaseMessage.includes('same salon day')) {
+      return 'O atendimento precisa começar e terminar no mesmo dia do salão.'
+    }
     return 'Os dados não atendem às regras do agendamento. Revise-os e tente novamente.'
   }
 
@@ -336,7 +339,7 @@ function unexpectedSaveError(error: unknown) {
 export function BookingDialog(props: BookingDialogProps) {
   const { booking, onClose } = props
   const dialogRef = useRef<HTMLDialogElement>(null)
-  const initialDateTime = bookingDateTimeInputValues(booking?.starts_at)
+  const initialDateTime = isoToSalonInputValues(booking?.starts_at)
   const [clientId, setClientId] = useState(
     booking?.client?.id === undefined ? '' : String(booking.client.id),
   )
@@ -715,7 +718,7 @@ export function BookingDialog(props: BookingDialogProps) {
                 id="booking-date"
                 name="date"
                 type="date"
-                min={todayInputValue()}
+                min={salonDateValue()}
                 value={date}
                 onChange={(event) => setDate(event.target.value)}
                 required

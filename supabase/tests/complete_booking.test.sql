@@ -3,6 +3,31 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(74);
 
+-- Legacy scenarios create bookings through the public RPC and then complete
+-- them immediately. Shift only this test's inserted fixtures to the past so
+-- they exercise completion after the new database clock guard.
+create function pg_temp.shift_complete_fixture_to_past()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.status in ('scheduled', 'confirmed')
+     and new.starts_at > statement_timestamp() then
+    update public.bookings
+    set starts_at = new.starts_at - interval '100 years',
+        ends_at = new.ends_at - interval '100 years'
+    where id = new.id;
+  end if;
+  return null;
+end;
+$$;
+
+create trigger complete_test_make_due
+after insert on public.bookings
+for each row execute function pg_temp.shift_complete_fixture_to_past();
+
 -- Public/private API and privilege shape.
 select has_function(
   'public',

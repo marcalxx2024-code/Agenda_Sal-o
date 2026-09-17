@@ -8,6 +8,8 @@ import { DashboardPage } from './pages/DashboardPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { LoginPage } from './pages/LoginPage'
 import { ReturnsPage } from './pages/ReturnsPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { ServicesPage } from './pages/ServicesPage'
 
 export default function App() {
@@ -15,6 +17,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route element={<PublicOnlyRoute />}>
             <Route path="/login" element={<LoginPage />} />
           </Route>
@@ -27,6 +30,7 @@ export default function App() {
               <Route path="servicos" element={<ServicesPage />} />
               <Route path="historico" element={<HistoryPage />} />
               <Route path="retornos" element={<ReturnsPage />} />
+              <Route path="configuracoes" element={<SettingsPage />} />
             </Route>
           </Route>
 

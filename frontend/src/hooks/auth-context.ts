@@ -17,8 +17,11 @@ export interface AuthContextValue {
   isRestoringSession: boolean
   authorizationStatus: AuthorizationStatus
   authorizationError: string | null
+  isPasswordRecovery: boolean
   retryAuthorization: () => void
   signIn: (email: string, password: string) => Promise<AuthActionResult>
+  requestPasswordReset: (email: string, redirectTo: string) => Promise<AuthActionResult>
+  updatePassword: (password: string) => Promise<AuthActionResult>
   signOut: () => Promise<AuthActionResult>
 }
 

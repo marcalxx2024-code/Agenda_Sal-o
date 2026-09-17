@@ -12,7 +12,12 @@ major_version = 17
 enabled = true
 enable_signup = false
 site_url = "http://127.0.0.1:3000"
-additional_redirect_urls = ["http://127.0.0.1:3000"]
+additional_redirect_urls = [
+  "http://127.0.0.1:3000/reset-password",
+  "http://127.0.0.1:5173/reset-password",
+  "http://localhost:3000/reset-password",
+  "http://localhost:5173/reset-password",
+]
 
 [auth.email]
 # O provedor permite login por e-mail; o bloqueio global acima impede cadastro

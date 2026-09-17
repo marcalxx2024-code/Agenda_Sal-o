@@ -5,25 +5,16 @@ import {
   type AppointmentListItem,
   type AppointmentsDataError,
 } from '../data/appointments'
+import { formatDateOnly } from '../lib/salon-time'
 
 type HistoryState =
   | { status: 'loading' }
   | { status: 'error'; error: AppointmentsDataError | null }
-  | { status: 'loaded'; appointments: AppointmentListItem[] }
-
-const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
-  day: '2-digit',
-  month: 'long',
-  year: 'numeric',
-  timeZone: 'UTC',
-})
-
-function formatDate(value: string) {
-  const date = new Date(`${value}T12:00:00Z`)
-  return Number.isNaN(date.getTime())
-    ? 'Data indisponível'
-    : dateFormatter.format(date)
-}
+  | {
+      status: 'loaded'
+      appointments: AppointmentListItem[]
+      hasMore: boolean
+    }
 
 function normalizeText(value: string) {
   return value
@@ -43,6 +34,8 @@ export function HistoryPage() {
   const [search, setSearch] = useState(searchParams.get('nome') ?? '')
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [state, setState] = useState<HistoryState>({ status: 'loading' })
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
 
   useEffect(() => {
     let isCurrent = true
@@ -53,7 +46,11 @@ export function HistoryPage() {
         setState(
           result.error
             ? { status: 'error', error: result.error }
-            : { status: 'loaded', appointments: result.data },
+            : {
+                status: 'loaded',
+                appointments: result.data,
+                hasMore: result.hasMore,
+              },
         )
       })
       .catch(() => {
@@ -78,6 +75,28 @@ export function HistoryPage() {
     setSearch('')
     setSearchParams({})
     setState({ status: 'loading' })
+  }
+
+  async function loadMore() {
+    if (state.status !== 'loaded' || isLoadingMore || !state.hasMore) return
+    setIsLoadingMore(true)
+    setLoadMoreError(null)
+    try {
+      const result = await listAppointments(clientId, state.appointments.length)
+      if (result.error) {
+        setLoadMoreError('Não foi possível carregar atendimentos mais antigos.')
+      } else {
+        setState({
+          status: 'loaded',
+          appointments: [...state.appointments, ...result.data],
+          hasMore: result.hasMore,
+        })
+      }
+    } catch {
+      setLoadMoreError('Não foi possível carregar atendimentos mais antigos.')
+    } finally {
+      setIsLoadingMore(false)
+    }
   }
 
   return (
@@ -165,7 +184,11 @@ export function HistoryPage() {
               <li className="record-card" key={appointment.id}>
                 <div className="record-card__main">
                   <span className="record-card__date">
-                    {formatDate(appointment.performed_on)}
+                    {formatDateOnly(appointment.performed_on, {
+                      day: '2-digit',
+                      month: 'long',
+                      year: 'numeric',
+                    })}
                   </span>
                   <h3>{appointment.client?.name ?? 'Cliente indisponível'}</h3>
                   <ul className="record-card__services">
@@ -187,6 +210,19 @@ export function HistoryPage() {
           })}
         </ul>
       )}
+      {state.status === 'loaded' && state.hasMore && (
+        <div className="records-load-more">
+          <button
+            className="primary-button"
+            type="button"
+            onClick={loadMore}
+            disabled={isLoadingMore}
+          >
+            {isLoadingMore ? 'Carregando…' : 'Carregar mais'}
+          </button>
+        </div>
+      )}
+      {loadMoreError && <p className="form-error" role="alert">{loadMoreError}</p>}
     </section>
   )
 }
