@@ -28,7 +28,10 @@ type CompleteBookingArgs =
 type CompleteBookingRow =
   Database['public']['Functions']['complete_booking']['Returns'][number]
 
-export type BookingClientOption = Pick<ClientRow, 'id' | 'name' | 'active'>
+export type BookingClientOption = Pick<
+  ClientRow,
+  'id' | 'name' | 'phone' | 'active'
+>
 export type BookingServiceOption = Pick<
   ServiceRow,
   'id' | 'name' | 'estimated_duration_minutes' | 'active'
@@ -196,7 +199,7 @@ export async function listBookingFormOptions(
 ): Promise<BookingFormOptionsResult> {
   const clientsQuery = supabase
     .from('clients')
-    .select('id, name, active')
+    .select('id, name, phone, active')
 
   const servicesQuery = supabase
     .from('services')

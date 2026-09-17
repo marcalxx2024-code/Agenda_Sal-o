@@ -5,6 +5,7 @@ import {
   useState,
   type FormEvent,
 } from 'react'
+import { BookingClientCreate } from './BookingClientCreate'
 import {
   createBooking,
   listBookingFormOptions,
@@ -64,6 +65,29 @@ type BookingSubmissionState =
     }
 
 const postgresIntegerMaximum = 2_147_483_647
+
+function normalizeSearch(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+}
+
+function clientMatchesSearch(
+  client: BookingFormOptions['clients'][number],
+  query: string,
+) {
+  const normalizedQuery = normalizeSearch(query.trim())
+  if (!normalizedQuery) return true
+
+  const queryDigits = query.replace(/\D/g, '')
+  const phoneDigits = client.phone.replace(/\D/g, '')
+  return (
+    normalizeSearch(client.name).includes(normalizedQuery) ||
+    normalizeSearch(client.phone).includes(normalizedQuery) ||
+    (queryDigits.length > 0 && phoneDigits.includes(queryDigits))
+  )
+}
 
 function durationLabel(durationMinutes: number) {
   if (durationMinutes < 60) return `${durationMinutes} min`
@@ -325,6 +349,9 @@ export function BookingDialog(props: BookingDialogProps) {
     bookingManualDurationInput(booking),
   )
   const [notes, setNotes] = useState(booking?.notes ?? '')
+  const [clientSearch, setClientSearch] = useState('')
+  const [isCreatingClient, setIsCreatingClient] = useState(false)
+  const [isCreatingClientBusy, setIsCreatingClientBusy] = useState(false)
   const [formErrors, setFormErrors] = useState<BookingFormErrors>({})
   const [optionsState, setOptionsState] = useState<OptionsLoadState>({
     status: 'loading',
@@ -378,6 +405,13 @@ export function BookingDialog(props: BookingDialogProps) {
 
   const options =
     optionsState.status === 'loaded' ? optionsState.options : null
+  const visibleClients = useMemo(
+    () =>
+      options?.clients.filter((client) =>
+        clientMatchesSearch(client, clientSearch),
+      ) ?? [],
+    [clientSearch, options],
+  )
   const selectedServices = useMemo(
     () =>
       options?.services.filter((service) =>
@@ -402,7 +436,40 @@ export function BookingDialog(props: BookingDialogProps) {
   )
 
   function closeDialog() {
-    if (!isSubmitting) dialogRef.current?.close()
+    if (!isSubmitting && !isCreatingClientBusy) dialogRef.current?.close()
+  }
+
+  function handleClientCreated(client: {
+    id: number
+    name: string
+    phone: string
+    active: boolean
+  }) {
+    setOptionsState((current) => {
+      if (current.status !== 'loaded') return current
+
+      const clients = [
+        ...current.options.clients.filter((item) => item.id !== client.id),
+        {
+          id: client.id,
+          name: client.name,
+          phone: client.phone,
+          active: client.active,
+        },
+      ].sort((first, second) =>
+        first.name.localeCompare(second.name, 'pt-BR'),
+      )
+
+      return {
+        status: 'loaded',
+        options: { ...current.options, clients },
+      }
+    })
+    setClientId(String(client.id))
+    setClientSearch(client.name)
+    setFormErrors((current) => ({ ...current, client: undefined }))
+    setIsCreatingClientBusy(false)
+    setIsCreatingClient(false)
   }
 
   function retryOptionsLoading() {
@@ -422,7 +489,14 @@ export function BookingDialog(props: BookingDialogProps) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (isSubmitting || !options) return
+    if (
+      isSubmitting ||
+      isCreatingClient ||
+      isCreatingClientBusy ||
+      !options
+    ) {
+      return
+    }
 
     const validation = validateBookingForm(
       clientId,
@@ -494,7 +568,7 @@ export function BookingDialog(props: BookingDialogProps) {
       aria-labelledby="booking-form-title"
       onClose={onClose}
       onCancel={(event) => {
-        if (isSubmitting) event.preventDefault()
+        if (isSubmitting || isCreatingClientBusy) event.preventDefault()
       }}
     >
       <form className="client-form" onSubmit={handleSubmit} noValidate>
@@ -519,7 +593,7 @@ export function BookingDialog(props: BookingDialogProps) {
               isEditing ? 'Fechar edição do agendamento' : 'Fechar novo agendamento'
             }
             onClick={closeDialog}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isCreatingClientBusy}
           >
             ×
           </button>
@@ -542,45 +616,95 @@ export function BookingDialog(props: BookingDialogProps) {
             </div>
           )}
 
-          <div className="client-form__field">
-            <label htmlFor="booking-client">
-              Cliente <span>Obrigatório</span>
-            </label>
-            <select
-              id="booking-client"
-              name="client_id"
-              value={clientId}
-              onChange={(event) => setClientId(event.target.value)}
-              autoFocus
-              required
-              disabled={isSubmitting || !options || activeClientCount === 0}
-              aria-invalid={Boolean(formErrors.client)}
-              aria-describedby={
-                formErrors.client ? 'booking-client-error' : undefined
-              }
-            >
-              <option value="">Selecione uma cliente</option>
-              {options?.clients.map((client) => (
-                <option value={client.id} key={client.id}>
-                  {client.name}{client.active ? '' : ' — inativa'}
-                </option>
-              ))}
-            </select>
-            {options && activeClientCount === 0 && (
-              <small className="client-form__help">
-                Não há clientes ativos disponíveis para agendamento.
-              </small>
-            )}
-            {formErrors.client && (
-              <p
-                className="client-form__error"
-                id="booking-client-error"
-                role="alert"
-              >
-                {formErrors.client}
-              </p>
-            )}
-          </div>
+          {isCreatingClient ? (
+            <BookingClientCreate
+              initialQuery={clientSearch}
+              onBusyChange={setIsCreatingClientBusy}
+              onCancel={() => setIsCreatingClient(false)}
+              onCreated={handleClientCreated}
+            />
+          ) : (
+            <div className="booking-client-picker">
+              <div className="client-form__field">
+                <label htmlFor="booking-client-search">
+                  Buscar cliente
+                </label>
+                <input
+                  id="booking-client-search"
+                  type="search"
+                  value={clientSearch}
+                  onChange={(event) => {
+                    setClientSearch(event.target.value)
+                    setClientId('')
+                  }}
+                  placeholder="Nome ou telefone"
+                  autoComplete="off"
+                  autoFocus
+                  disabled={isSubmitting || !options}
+                />
+              </div>
+
+              <div className="client-form__field">
+                <label htmlFor="booking-client">
+                  Cliente <span>Obrigatório</span>
+                </label>
+                <select
+                  id="booking-client"
+                  name="client_id"
+                  value={clientId}
+                  onChange={(event) => setClientId(event.target.value)}
+                  required
+                  disabled={isSubmitting || !options || activeClientCount === 0}
+                  aria-invalid={Boolean(formErrors.client)}
+                  aria-describedby={
+                    formErrors.client ? 'booking-client-error' : undefined
+                  }
+                >
+                  <option value="">Selecione uma cliente</option>
+                  {visibleClients.map((client) => (
+                    <option value={client.id} key={client.id}>
+                      {client.name} · {client.phone}
+                      {client.active ? '' : ' — inativa'}
+                    </option>
+                  ))}
+                </select>
+
+                {options && visibleClients.length === 0 && clientSearch.trim() && (
+                  <small className="client-form__help" role="status">
+                    Nenhuma cliente encontrada para essa busca.
+                  </small>
+                )}
+                {options && activeClientCount === 0 && (
+                  <small className="client-form__help">
+                    Não há clientes ativos disponíveis para agendamento.
+                  </small>
+                )}
+                <button
+                  className="booking-client-picker__create"
+                  type="button"
+                  onClick={() => {
+                    setFormErrors((current) => ({
+                      ...current,
+                      client: undefined,
+                    }))
+                    setIsCreatingClient(true)
+                  }}
+                  disabled={isSubmitting || !options}
+                >
+                  + Cadastrar nova cliente
+                </button>
+                {formErrors.client && (
+                  <p
+                    className="client-form__error"
+                    id="booking-client-error"
+                    role="alert"
+                  >
+                    {formErrors.client}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="booking-form__date-time">
             <div className="client-form__field">
@@ -820,14 +944,20 @@ export function BookingDialog(props: BookingDialogProps) {
             className="client-form__cancel"
             type="button"
             onClick={closeDialog}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isCreatingClientBusy}
           >
             Cancelar
           </button>
           <button
             className="primary-button client-form__submit"
             type="submit"
-            disabled={isSubmitting || isInvalidated || !canSubmit}
+            disabled={
+              isSubmitting ||
+              isCreatingClient ||
+              isCreatingClientBusy ||
+              isInvalidated ||
+              !canSubmit
+            }
           >
             {isSubmitting
               ? isEditing

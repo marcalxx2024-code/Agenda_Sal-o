@@ -2364,6 +2364,80 @@ a {
   font-size: 13px;
 }
 
+.booking-client-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 12px;
+}
+
+.booking-client-picker__create {
+  justify-self: start;
+  padding: 5px 0;
+  border: 0;
+  color: var(--rose-deep);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.booking-client-picker__create:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.booking-client-create {
+  display: grid;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid #d8c9bd;
+  border-radius: 12px;
+  background: #fbf6f0;
+  gap: 14px;
+}
+
+.booking-client-create legend {
+  padding: 0 7px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.booking-client-create > p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.booking-client-create__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.booking-client-create .client-form__submit-error {
+  margin: 0;
+}
+
+.booking-client-create__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.booking-client-create__actions > button {
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 8px;
+}
+
+.booking-client-create__actions > button:first-child {
+  border: 1px solid #d8cec5;
+  color: var(--ink-soft);
+  background: transparent;
+  font-weight: 700;
+}
+
 .records-page {
   display: grid;
   gap: 24px;
@@ -2656,5 +2730,19 @@ a {
   .client-row {
     grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 10px 16px;
+  }
+
+  .booking-client-picker,
+  .booking-client-create__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-client-create__actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .booking-client-create__actions > button {
+    width: 100%;
   }
 }
