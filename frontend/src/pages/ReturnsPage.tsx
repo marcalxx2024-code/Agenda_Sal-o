@@ -448,7 +448,7 @@ export function ReturnsPage() {
                     {item.client_phone ? (
                       <a href={`tel:${item.client_phone}`}>{item.client_phone}</a>
                     ) : (
-                      <span>Telefone não cadastrado</span>
+                      <span>Telefone inválido ou não cadastrado</span>
                     )}
                   </div>
                   <span className={`booking-status booking-status--${status.tone}`}>
@@ -491,14 +491,14 @@ export function ReturnsPage() {
                     aria-label={
                       hasWhatsapp
                         ? `Avisar ${item.client_name ?? 'cliente'} pelo WhatsApp`
-                        : 'WhatsApp indisponível: telefone não cadastrado'
+                        : 'WhatsApp indisponível: telefone inválido ou não cadastrado'
                     }
                   >
                     {contactingId === item.id
                       ? 'Registrando contato…'
                       : hasWhatsapp
                         ? 'Avisar pelo WhatsApp'
-                        : 'Telefone não cadastrado'}
+                        : 'Telefone inválido ou não cadastrado'}
                   </button>
                   <button
                     type="button"
