@@ -15,6 +15,7 @@ const navigation: NavigationItem[] = [
   { label: 'Agenda', path: '/agenda', icon: 'calendar' },
   { label: 'Clientes', path: '/clientes', icon: 'clients' },
   { label: 'Serviços', path: '/servicos', icon: 'services' },
+  { label: 'Histórico', path: '/historico', icon: 'history' },
   { label: 'Retornos', path: '/retornos', icon: 'returns' },
 ]
 
@@ -23,6 +24,7 @@ const pageTitles: Record<string, string> = {
   '/agenda': 'Agenda',
   '/clientes': 'Clientes',
   '/servicos': 'Serviços',
+  '/historico': 'Histórico',
   '/retornos': 'Retornos',
 }
 

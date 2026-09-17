@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { BookingCompleteDialog } from '../components/BookingCompleteDialog'
 import {
   BookingCancelDialog,
   BookingConfirmDialog,
@@ -12,6 +13,7 @@ import {
   type BookingsDataError,
   type CancelledBooking,
   type ConfirmedBooking,
+  type CompletedBooking,
   type NoShowBooking,
 } from '../data/bookings'
 
@@ -42,6 +44,34 @@ const timeFormatter = new Intl.DateTimeFormat('pt-BR', {
 
 function bookingCountLabel(count: number) {
   return `${count} ${count === 1 ? 'agendamento' : 'agendamentos'}`
+}
+
+function localDateValue(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function initialPeriod() {
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 29)
+  return { from: localDateValue(start), to: localDateValue(end) }
+}
+
+function periodToQuery(from: string, to: string, status: string) {
+  const start = from ? new Date(`${from}T00:00:00`) : null
+  const end = to ? new Date(`${to}T00:00:00`) : null
+  if (end) end.setDate(end.getDate() + 1)
+  return {
+    ...(start && !Number.isNaN(start.getTime())
+      ? { from: start.toISOString() }
+      : {}),
+    ...(end && !Number.isNaN(end.getTime()) ? { to: end.toISOString() } : {}),
+    ...(status ? { status } : {}),
+  }
 }
 
 function validDate(value: string) {
@@ -106,6 +136,7 @@ function canMarkBookingNoShow(
 }
 
 export function AgendaPage() {
+  const defaultPeriod = initialPeriod()
   const [loadState, setLoadState] = useState<AgendaLoadState>({
     status: 'loading',
   })
@@ -119,6 +150,14 @@ export function AgendaPage() {
     useState<AgendaBookingListItem | null>(null)
   const [bookingToMarkNoShow, setBookingToMarkNoShow] =
     useState<AgendaBookingListItem | null>(null)
+  const [bookingToComplete, setBookingToComplete] =
+    useState<AgendaBookingListItem | null>(null)
+  const [filterFrom, setFilterFrom] = useState(defaultPeriod.from)
+  const [filterTo, setFilterTo] = useState(defaultPeriod.to)
+  const [filterStatus, setFilterStatus] = useState('')
+  const [appliedFilters, setAppliedFilters] = useState(() =>
+    periodToQuery(defaultPeriod.from, defaultPeriod.to, ''),
+  )
   const [currentTime, setCurrentTime] = useState(() => Date.now())
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
 
@@ -133,7 +172,7 @@ export function AgendaPage() {
   useEffect(() => {
     let isCurrent = true
 
-    void listBookings()
+    void listBookings(appliedFilters)
       .then((result) => {
         if (!isCurrent) return
 
@@ -152,7 +191,7 @@ export function AgendaPage() {
     return () => {
       isCurrent = false
     }
-  }, [loadAttempt])
+  }, [appliedFilters, loadAttempt])
 
   const bookings =
     loadState.status === 'loaded' ? loadState.bookings : []
@@ -235,6 +274,49 @@ export function AgendaPage() {
     reflectBookingStatus(noShowBooking)
   }
 
+  function openCompleteDialog(booking: AgendaBookingListItem) {
+    setSaveSuccess(null)
+    setBookingToComplete(booking)
+  }
+
+  function handleBookingCompleted(completedBooking: CompletedBooking) {
+    setBookingToComplete(null)
+    setSaveSuccess('Atendimento concluído e registrado no histórico.')
+    setLoadState((currentState) =>
+      currentState.status === 'loaded'
+        ? {
+            status: 'loaded',
+            bookings: currentState.bookings.map((booking) =>
+              booking.id === completedBooking.booking_id
+                ? { ...booking, status: completedBooking.booking_status }
+                : booking,
+            ),
+          }
+        : currentState,
+    )
+    setLoadAttempt((attempt) => attempt + 1)
+  }
+
+  function applyFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSaveSuccess(null)
+    setLoadState({ status: 'loading' })
+    setAppliedFilters(periodToQuery(filterFrom, filterTo, filterStatus))
+  }
+
+  function applyQuickPeriod(totalDays: number) {
+    const start = new Date()
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(start)
+    end.setDate(end.getDate() + totalDays - 1)
+    const from = localDateValue(start)
+    const to = localDateValue(end)
+    setFilterFrom(from)
+    setFilterTo(to)
+    setLoadState({ status: 'loading' })
+    setAppliedFilters(periodToQuery(from, to, filterStatus))
+  }
+
   function refreshInvalidatedBooking() {
     setLoadState({ status: 'loading' })
     setLoadAttempt((attempt) => attempt + 1)
@@ -263,6 +345,48 @@ export function AgendaPage() {
           </button>
         </div>
       </header>
+
+      <form className="agenda-filters" onSubmit={applyFilters}>
+        <div className="agenda-filters__quick" aria-label="Períodos rápidos">
+          <button type="button" onClick={() => applyQuickPeriod(1)}>Hoje</button>
+          <button type="button" onClick={() => applyQuickPeriod(7)}>Próximos 7 dias</button>
+          <button type="button" onClick={() => applyQuickPeriod(30)}>Próximos 30 dias</button>
+        </div>
+        <div className="agenda-filters__fields">
+          <label>
+            Data inicial
+            <input
+              type="date"
+              value={filterFrom}
+              onChange={(event) => setFilterFrom(event.target.value)}
+            />
+          </label>
+          <label>
+            Data final
+            <input
+              type="date"
+              value={filterTo}
+              min={filterFrom || undefined}
+              onChange={(event) => setFilterTo(event.target.value)}
+            />
+          </label>
+          <label>
+            Status
+            <select
+              value={filterStatus}
+              onChange={(event) => setFilterStatus(event.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="scheduled">Agendado</option>
+              <option value="confirmed">Confirmado</option>
+              <option value="completed">Concluído</option>
+              <option value="cancelled">Cancelado</option>
+              <option value="no_show">Não compareceu</option>
+            </select>
+          </label>
+          <button className="primary-button" type="submit">Aplicar filtros</button>
+        </div>
+      </form>
 
       {saveSuccess && (
         <p className="agenda-success" role="status">
@@ -296,8 +420,8 @@ export function AgendaPage() {
       {loadState.status === 'loaded' && bookings.length === 0 && (
         <div className="agenda-state" role="status">
           <span className="eyebrow">Agenda</span>
-          <h3>Nenhum agendamento cadastrado.</h3>
-          <p>Os próximos horários aparecerão aqui quando forem agendados.</p>
+          <h3>Nenhum agendamento encontrado.</h3>
+          <p>Altere o período ou o status para consultar outros horários.</p>
         </div>
       )}
 
@@ -380,6 +504,17 @@ export function AgendaPage() {
                     {(booking.status === 'scheduled' ||
                       booking.status === 'confirmed') && (
                       <button
+                        className="booking-row__action booking-row__action--complete"
+                        type="button"
+                        aria-label={`Concluir atendimento de ${booking.client?.name ?? 'cliente indisponível'} em ${schedule.date}, ${schedule.time}`}
+                        onClick={() => openCompleteDialog(booking)}
+                      >
+                        Concluir atendimento
+                      </button>
+                    )}
+                    {(booking.status === 'scheduled' ||
+                      booking.status === 'confirmed') && (
+                      <button
                         className="booking-row__action booking-row__action--cancel"
                         type="button"
                         aria-label={`Cancelar agendamento de ${booking.client?.name ?? 'cliente indisponível'} em ${schedule.date}, ${schedule.time}`}
@@ -454,6 +589,16 @@ export function AgendaPage() {
           booking={bookingToMarkNoShow}
           onClose={() => setBookingToMarkNoShow(null)}
           onMarkedNoShow={handleBookingMarkedNoShow}
+          onInvalidated={refreshInvalidatedBooking}
+        />
+      )}
+
+      {bookingToComplete && (
+        <BookingCompleteDialog
+          key={bookingToComplete.id}
+          booking={bookingToComplete}
+          onClose={() => setBookingToComplete(null)}
+          onCompleted={handleBookingCompleted}
           onInvalidated={refreshInvalidatedBooking}
         />
       )}

@@ -3,6 +3,7 @@ export type NavIconName =
   | 'calendar'
   | 'clients'
   | 'services'
+  | 'history'
   | 'returns'
 
 interface NavIconProps {
@@ -33,6 +34,12 @@ export function NavIcon({ name }: NavIconProps) {
       <>
         <path d="M6 3v5a6 6 0 0 0 12 0V3M5 21h14" />
         <path d="M12 14v7" />
+      </>
+    ),
+    history: (
+      <>
+        <path d="M4 5h16v16H4z" />
+        <path d="M8 3v4M16 3v4M8 11h8M8 15h5" />
       </>
     ),
     returns: (

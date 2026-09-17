@@ -5,8 +5,9 @@ import { AuthProvider } from './hooks/AuthProvider'
 import { AgendaPage } from './pages/AgendaPage'
 import { ClientsPage } from './pages/ClientsPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { HistoryPage } from './pages/HistoryPage'
 import { LoginPage } from './pages/LoginPage'
-import { PlaceholderPage } from './pages/PlaceholderPage'
+import { ReturnsPage } from './pages/ReturnsPage'
 import { ServicesPage } from './pages/ServicesPage'
 
 export default function App() {
@@ -24,16 +25,8 @@ export default function App() {
               <Route path="agenda" element={<AgendaPage />} />
               <Route path="clientes" element={<ClientsPage />} />
               <Route path="servicos" element={<ServicesPage />} />
-              <Route
-                path="retornos"
-                element={
-                  <PlaceholderPage
-                    title="Retornos"
-                    description="Os avisos para contato e o acompanhamento dos retornos ficarão aqui."
-                    icon="returns"
-                  />
-                }
-              />
+              <Route path="historico" element={<HistoryPage />} />
+              <Route path="retornos" element={<ReturnsPage />} />
             </Route>
           </Route>
 

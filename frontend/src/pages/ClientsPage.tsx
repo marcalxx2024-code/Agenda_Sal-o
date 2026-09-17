@@ -5,6 +5,7 @@ import {
   useState,
   type FormEvent,
 } from 'react'
+import { Link } from 'react-router-dom'
 import {
   createClient,
   listClients,
@@ -694,6 +695,13 @@ export function ClientsPage() {
                     role="group"
                     aria-label={`Ações para ${client.name}`}
                   >
+                    <Link
+                      className="client-row__action"
+                      to={`/historico?cliente=${client.id}&nome=${encodeURIComponent(client.name)}`}
+                      aria-label={`Ver histórico de ${client.name}`}
+                    >
+                      Histórico
+                    </Link>
                     <button
                       className="client-row__action"
                       type="button"

@@ -23,6 +23,10 @@ type MarkBookingNoShowArgs =
   Database['public']['Functions']['mark_booking_no_show']['Args']
 type MarkBookingNoShowRow =
   Database['public']['Functions']['mark_booking_no_show']['Returns'][number]
+type CompleteBookingArgs =
+  Database['public']['Functions']['complete_booking']['Args']
+type CompleteBookingRow =
+  Database['public']['Functions']['complete_booking']['Returns'][number]
 
 export type BookingClientOption = Pick<ClientRow, 'id' | 'name' | 'active'>
 export type BookingServiceOption = Pick<
@@ -36,6 +40,8 @@ export type UpdatedBooking = UpdateBookingRow
 export type ConfirmedBooking = ConfirmBookingRow
 export type CancelledBooking = CancelBookingRow
 export type NoShowBooking = MarkBookingNoShowRow
+export type CompleteBookingInput = CompleteBookingArgs
+export type CompletedBooking = CompleteBookingRow
 export type BookingStatusChange =
   | ConfirmBookingRow
   | CancelBookingRow
@@ -80,6 +86,12 @@ export type ListBookingsResult =
   | { data: AgendaBookingListItem[]; error: null }
   | { data: null; error: BookingsDataError }
 
+export interface BookingListFilters {
+  from?: string
+  to?: string
+  status?: string
+}
+
 export interface BookingFormOptions {
   clients: BookingClientOption[]
   services: BookingServiceOption[]
@@ -114,6 +126,19 @@ export type MarkBookingNoShowResult =
   | { data: NoShowBooking; error: null }
   | { data: null; error: BookingsDataError }
 
+export type CompleteBookingResult =
+  | { data: CompletedBooking; error: null }
+  | { data: null; error: BookingsDataError }
+
+export type CompletionServiceOption = Pick<
+  ServiceRow,
+  'id' | 'name' | 'active'
+>
+
+export type CompletionServiceOptionsResult =
+  | { data: CompletionServiceOption[]; error: null }
+  | { data: null; error: BookingsDataError }
+
 function toBookingsDataError(error: PostgrestError): BookingsDataError {
   return {
     code: error.code,
@@ -123,8 +148,41 @@ function toBookingsDataError(error: PostgrestError): BookingsDataError {
   }
 }
 
-export async function listBookings(): Promise<ListBookingsResult> {
-  const { data, error } = await agendaBookingsQuery()
+export async function listBookings(
+  filters: BookingListFilters = {},
+): Promise<ListBookingsResult> {
+  let query = agendaBookingsQuery()
+
+  if (filters.from) query = query.gte('starts_at', filters.from)
+  if (filters.to) query = query.lt('starts_at', filters.to)
+  if (filters.status) query = query.eq('status', filters.status)
+
+  const { data, error } = await query
+
+  if (error) {
+    return { data: null, error: toBookingsDataError(error) }
+  }
+
+  return { data, error: null }
+}
+
+export async function listCompletionServiceOptions(
+  plannedServiceIds: ServiceRow['id'][],
+): Promise<CompletionServiceOptionsResult> {
+  const servicesQuery = supabase
+    .from('services')
+    .select('id, name, active')
+
+  const scopedQuery =
+    plannedServiceIds.length > 0
+      ? servicesQuery.or(
+          `active.eq.true,id.in.(${plannedServiceIds.join(',')})`,
+        )
+      : servicesQuery.eq('active', true)
+
+  const { data, error } = await scopedQuery
+    .order('name', { ascending: true })
+    .order('id', { ascending: true })
 
   if (error) {
     return { data: null, error: toBookingsDataError(error) }
@@ -240,6 +298,18 @@ export async function markBookingNoShow(
   const { data, error } = await supabase
     .rpc('mark_booking_no_show', { p_booking_id: bookingId })
     .single()
+
+  if (error) {
+    return { data: null, error: toBookingsDataError(error) }
+  }
+
+  return { data, error: null }
+}
+
+export async function completeBooking(
+  input: CompleteBookingInput,
+): Promise<CompleteBookingResult> {
+  const { data, error } = await supabase.rpc('complete_booking', input).single()
 
   if (error) {
     return { data: null, error: toBookingsDataError(error) }
