@@ -6,7 +6,8 @@
     "db:start": "supabase start",
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
-    "db:types": "supabase gen types typescript --local --schema public"
+    "db:types": "supabase gen types typescript --local --schema public",
+    "db:authorize-local-admin": "powershell -NoProfile -ExecutionPolicy Bypass -File supabase/scripts/authorize-local-admin.ps1"
   },
   "devDependencies": {
     "supabase": "2.116.0"

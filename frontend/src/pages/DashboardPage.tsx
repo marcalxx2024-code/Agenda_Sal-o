@@ -70,42 +70,48 @@ export function DashboardPage() {
 
   const { data } = state
   const cards = [
-    [
-      'Agendamentos de hoje',
-      data.todayBookings,
-      'Horários ativos previstos para hoje',
-      'rose',
-    ],
-    [
-      'Próximos agendamentos',
-      data.upcomingBookings,
-      'Agendados ou confirmados daqui em diante',
-      'olive',
-    ],
-    [
-      'Clientes ativos',
-      data.activeClients,
-      'Cadastros disponíveis para agendamento',
-      'sand',
-    ],
-    [
-      'Serviços ativos',
-      data.activeServices,
-      'Procedimentos disponíveis no catálogo',
-      'rose',
-    ],
-    [
-      'Retornos pendentes',
-      data.pendingReturns,
-      'Contatos aguardando acompanhamento',
-      'sand',
-    ],
-    [
-      'Atendimentos recentes',
-      data.recentAppointmentsCount,
-      'Realizados nos últimos 30 dias',
-      'olive',
-    ],
+    {
+      label: 'Agendamentos de hoje',
+      value: data.todayBookings,
+      note: 'Horários ativos previstos para hoje',
+      tone: 'rose',
+      priority: true,
+    },
+    {
+      label: 'Próximos agendamentos',
+      value: data.upcomingBookings,
+      note: 'Agendados ou confirmados daqui em diante',
+      tone: 'olive',
+      priority: true,
+    },
+    {
+      label: 'Clientes ativos',
+      value: data.activeClients,
+      note: 'Cadastros disponíveis para agendamento',
+      tone: 'sand',
+      priority: false,
+    },
+    {
+      label: 'Serviços ativos',
+      value: data.activeServices,
+      note: 'Procedimentos disponíveis no catálogo',
+      tone: 'rose',
+      priority: false,
+    },
+    {
+      label: 'Retornos pendentes',
+      value: data.pendingReturns,
+      note: 'Contatos aguardando acompanhamento',
+      tone: 'sand',
+      priority: true,
+    },
+    {
+      label: 'Atendimentos recentes',
+      value: data.recentAppointmentsCount,
+      note: 'Realizados nos últimos 30 dias',
+      tone: 'olive',
+      priority: false,
+    },
   ] as const
 
   return (
@@ -132,9 +138,9 @@ export function DashboardPage() {
           <span className="placeholder-badge">Atualizado agora</span>
         </div>
         <div className="overview-grid dashboard-overview-grid">
-          {cards.map(([label, value, note, tone]) => (
+          {cards.map(({ label, value, note, tone, priority }) => (
             <article
-              className={`overview-card overview-card--${tone}`}
+              className={`overview-card overview-card--${tone} overview-card--${priority ? 'priority' : 'secondary'}`}
               key={label}
             >
               <span className="overview-card__label">{label}</span>

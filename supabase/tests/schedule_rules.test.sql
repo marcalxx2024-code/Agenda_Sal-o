@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select plan(10);
+select plan(13);
 
 insert into auth.users (id, email)
 values ('a1000000-0000-4000-8000-000000000001', 'schedule.salao@example.test')
@@ -93,6 +93,15 @@ select throws_ok(
 insert into public.schedule_blocks (starts_at, ends_at, reason)
 select block_start, block_end, 'Bloqueio de teste' from schedule_clock;
 select throws_ok(
+  $$insert into public.schedule_blocks (starts_at, ends_at, reason)
+    select block_start + interval '30 minutes',
+           block_end + interval '30 minutes',
+           'Bloqueio sobreposto'
+    from schedule_clock$$,
+  '23P01', 'schedule block conflicts with another schedule block',
+  'sobreposicao entre bloqueios e rejeitada'
+);
+select throws_ok(
   $$select * from public.create_booking(
       (select id from public.clients where name = 'Cliente Expediente Ativa'),
       (select block_start + interval '15 minutes' from schedule_clock),
@@ -143,6 +152,17 @@ cross join lateral (
 ) clock
 where c.name = 'Cliente Expediente Ativa';
 
+insert into public.bookings (client_id, starts_at, ends_at, status, notes)
+select c.id,
+       (salon_day + time '14:00') at time zone 'America/Sao_Paulo',
+       (salon_day + time '15:00') at time zone 'America/Sao_Paulo',
+       'scheduled', 'Conclusao com data futura'
+from public.clients c
+cross join lateral (
+  select (statement_timestamp() at time zone 'America/Sao_Paulo')::date - 2 as salon_day
+) clock
+where c.name = 'Cliente Expediente Ativa';
+
 set local role authenticated;
 set local "request.jwt.claims" =
   '{"sub":"a1000000-0000-4000-8000-000000000001","role":"authenticated"}';
@@ -154,6 +174,22 @@ select is(
   )),
   'completed'::text,
   'conclusao valida apos o horario e aceita'
+);
+
+select throws_ok(
+  $$select * from public.complete_booking(
+      (select id from public.bookings where notes = 'Conclusao com data futura'),
+      ((statement_timestamp() at time zone 'America/Sao_Paulo')::date + 1),
+      array[(select id from public.services where name = 'Servico Expediente')]
+    )$$,
+  '22023', 'p_performed_on must not be in the future',
+  'data efetiva futura e rejeitada no banco usando o fuso do salao'
+);
+
+select is(
+  (select status from public.bookings where notes = 'Conclusao com data futura'),
+  'scheduled'::text,
+  'falha na data efetiva preserva o estado do agendamento'
 );
 
 reset role;

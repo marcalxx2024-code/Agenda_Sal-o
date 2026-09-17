@@ -9,7 +9,6 @@ import {
 import {
   formatDateOnly,
   salonDateTimeFormatter,
-  salonDateValue,
 } from '../lib/salon-time'
 
 type ReturnsState =
@@ -34,16 +33,46 @@ function formatDate(value: string | null) {
   })
 }
 
-function dueTone(dueOn: string | null) {
-  if (!dueOn) return { label: 'Sem data', tone: 'future' }
-  const today = salonDateValue()
-  const days = Math.round(
-    (Date.parse(`${dueOn}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) /
-      86_400_000,
-  )
-  if (days < 0) return { label: 'Atrasado', tone: 'overdue' }
-  if (days <= 30) return { label: 'Próximo', tone: 'soon' }
-  return { label: 'Futuro', tone: 'future' }
+function dueTone(daysUntilDue: number | null) {
+  if (daysUntilDue === null) return { label: 'Sem data prevista', tone: 'future' }
+  if (daysUntilDue < 0) {
+    const overdueDays = Math.abs(daysUntilDue)
+    return {
+      label: `${overdueDays} ${overdueDays === 1 ? 'dia' : 'dias'} em atraso`,
+      tone: 'overdue',
+    }
+  }
+  if (daysUntilDue === 0) return { label: 'Retorno previsto para hoje', tone: 'soon' }
+  if (daysUntilDue <= 30) {
+    return {
+      label: `Em ${daysUntilDue} ${daysUntilDue === 1 ? 'dia' : 'dias'}`,
+      tone: 'soon',
+    }
+  }
+  return { label: `Em ${daysUntilDue} dias`, tone: 'future' }
+}
+
+function returnStatus(status: string | null) {
+  const statuses: Record<string, { label: string; tone: string }> = {
+    pending: { label: 'Pendente', tone: 'scheduled' },
+    contacted: { label: 'Contatada', tone: 'confirmed' },
+    completed: { label: 'Concluído', tone: 'completed' },
+    cancelled: { label: 'Cancelado', tone: 'cancelled' },
+  }
+
+  return statuses[status ?? ''] ?? { label: 'Pendente', tone: 'scheduled' }
+}
+
+function validWhatsappPhone(phone: string | null) {
+  return phone !== null && /^\d{10,15}$/.test(phone)
+}
+
+function whatsappMessage(item: PendingReturn) {
+  const firstName = item.client_name?.trim().split(/\s+/)[0]
+  const service = item.service_name?.trim() || 'seu serviço'
+  const greeting = firstName ? `Olá, ${firstName}! Tudo bem?` : 'Olá! Tudo bem?'
+
+  return `${greeting}\n\nAqui é do salão Monica Lugo.\n\nJá está chegando o período recomendado para o seu retorno de ${service}.\n\nSe quiser, podemos combinar um novo horário.`
 }
 
 function friendlyActionError(error: ReturnsDataError) {
@@ -52,6 +81,9 @@ function friendlyActionError(error: ReturnsDataError) {
   }
   if (error.code === '42501' || error.code.startsWith('PGRST3')) {
     return 'Sua sessão não possui permissão para alterar retornos.'
+  }
+  if (error.code === '55000') {
+    return 'Este retorno mudou de situação. A lista será atualizada.'
   }
   return 'Não foi possível atualizar o retorno. Tente novamente.'
 }
@@ -209,6 +241,8 @@ export function ReturnsPage() {
   const [success, setSuccess] = useState<string | null>(null)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
+  const [contactingId, setContactingId] = useState<number | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
     let isCurrent = true
@@ -232,6 +266,12 @@ export function ReturnsPage() {
       isCurrent = false
     }
   }, [loadAttempt])
+
+  useEffect(() => {
+    if (!success) return
+    const timeoutId = window.setTimeout(() => setSuccess(null), 5_000)
+    return () => window.clearTimeout(timeoutId)
+  }, [success])
 
   const items = state.status === 'loaded' ? state.returns : []
 
@@ -262,6 +302,76 @@ export function ReturnsPage() {
     }
   }
 
+  async function openWhatsapp(item: PendingReturn) {
+    if (
+      contactingId !== null ||
+      item.id === null ||
+      !validWhatsappPhone(item.client_phone_normalized)
+    ) {
+      return
+    }
+
+    setSuccess(null)
+    setActionError(null)
+    const link = `https://wa.me/${item.client_phone_normalized}?text=${encodeURIComponent(whatsappMessage(item))}`
+    const whatsappWindow = window.open(link, '_blank')
+
+    if (!whatsappWindow) {
+      setActionError(
+        'Não foi possível abrir o WhatsApp. Permita a abertura de novas janelas e tente novamente.',
+      )
+      return
+    }
+
+    try {
+      whatsappWindow.opener = null
+    } catch {
+      // Some browsers protect WindowProxy properties after handing the URL to
+      // the installed WhatsApp app. The link was already opened successfully.
+    }
+
+    setContactingId(item.id)
+
+    try {
+      const result = await markReturnContacted({ p_return_id: item.id })
+
+      if (result.error) {
+        const invalidated = ['P0002', 'PGRST116', '55000'].includes(
+          result.error.code,
+        )
+        setActionError(
+          `O WhatsApp foi aberto, mas ${friendlyActionError(result.error).toLocaleLowerCase('pt-BR')}`,
+        )
+        if (invalidated) reload()
+        return
+      }
+
+      setState((current) =>
+        current.status === 'loaded'
+          ? {
+              ...current,
+              returns: current.returns.map((currentItem) =>
+                currentItem.id === item.id
+                  ? {
+                      ...currentItem,
+                      contacted_at: result.data.contacted_at,
+                      status: 'contacted',
+                    }
+                  : currentItem,
+              ),
+            }
+          : current,
+      )
+      setSuccess('WhatsApp aberto e contato registrado como Contatada.')
+    } catch {
+      setActionError(
+        'O WhatsApp foi aberto, mas não foi possível registrar o contato. Tente registrar novamente.',
+      )
+    } finally {
+      setContactingId(null)
+    }
+  }
+
   return (
     <section className="returns-page records-page" aria-labelledby="returns-title">
       <header className="records-page__heading">
@@ -280,6 +390,11 @@ export function ReturnsPage() {
       {success && (
         <p className="agenda-success" role="status">
           {success}
+        </p>
+      )}
+      {actionError && (
+        <p className="form-error returns-action-error" role="alert">
+          {actionError}
         </p>
       )}
 
@@ -314,7 +429,11 @@ export function ReturnsPage() {
       {state.status === 'loaded' && items.length > 0 && (
         <ul className="return-list" aria-label="Retornos pendentes">
           {items.map((item) => {
-            const timing = dueTone(item.due_on)
+            const timing = dueTone(item.days_until_due)
+            const status = returnStatus(item.status)
+            const hasWhatsapp = validWhatsappPhone(
+              item.client_phone_normalized,
+            )
             return (
               <li
                 className={`return-card return-card--${timing.tone}`}
@@ -329,11 +448,11 @@ export function ReturnsPage() {
                     {item.client_phone ? (
                       <a href={`tel:${item.client_phone}`}>{item.client_phone}</a>
                     ) : (
-                      <span>Telefone indisponível</span>
+                      <span>Telefone não cadastrado</span>
                     )}
                   </div>
-                  <span className="booking-status booking-status--scheduled">
-                    Pendente
+                  <span className={`booking-status booking-status--${status.tone}`}>
+                    {status.label}
                   </span>
                 </div>
                 <dl className="return-card__details">
@@ -364,6 +483,23 @@ export function ReturnsPage() {
                   </p>
                 )}
                 <div className="return-card__actions">
+                  <button
+                    className="return-card__whatsapp"
+                    type="button"
+                    onClick={() => void openWhatsapp(item)}
+                    disabled={!hasWhatsapp || contactingId !== null}
+                    aria-label={
+                      hasWhatsapp
+                        ? `Avisar ${item.client_name ?? 'cliente'} pelo WhatsApp`
+                        : 'WhatsApp indisponível: telefone não cadastrado'
+                    }
+                  >
+                    {contactingId === item.id
+                      ? 'Registrando contato…'
+                      : hasWhatsapp
+                        ? 'Avisar pelo WhatsApp'
+                        : 'Telefone não cadastrado'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setSelected({ item, action: 'contact' })}

@@ -520,7 +520,7 @@ set local "request.jwt.claims" =
 select lives_ok(
   $$select * from public.create_appointment_with_services(
       (select id from public.clients where name = 'Cliente Booking'),
-      date '2030-01-10',
+      date '2020-01-10',
       array[(select id from public.services where name = 'Servico Booking')],
       'Atendimento avulso'
     )$$,

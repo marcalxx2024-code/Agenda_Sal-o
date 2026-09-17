@@ -45,8 +45,13 @@ function timeInput(value: string | null) {
 
 function friendlySettingsError(error: SettingsDataError) {
   const message = error.message.toLocaleLowerCase('en-US')
-  if (error.code === '23P01' && message.includes('active booking')) {
-    return 'O bloqueio coincide com um agendamento ativo. Cancele ou altere o agendamento primeiro.'
+  if (error.code === '23P01') {
+    if (message.includes('active booking')) {
+      return 'O bloqueio coincide com um agendamento ativo. Cancele ou altere o agendamento primeiro.'
+    }
+    if (message.includes('another schedule block')) {
+      return 'Este período coincide com outro bloqueio ou folga já cadastrado.'
+    }
   }
   if (error.code === '23514') {
     return 'Revise os horários: abertura, intervalo e fechamento devem estar em ordem.'
@@ -90,6 +95,12 @@ export function SettingsPage() {
     }
   }, [loadAttempt])
 
+  useEffect(() => {
+    if (!feedback) return
+    const timeoutId = window.setTimeout(() => setFeedback(null), 5_000)
+    return () => window.clearTimeout(timeoutId)
+  }, [feedback])
+
   const sortedHours = useMemo(
     () =>
       state.status === 'loaded'
@@ -117,23 +128,28 @@ export function SettingsPage() {
     setIsSavingHours(true)
     setFeedback(null)
     setError(null)
-    for (const item of state.hours) {
-      const result = await updateBusinessHour(item.weekday, {
-        is_open: item.is_open,
-        opens_at: item.is_open ? item.opens_at : null,
-        closes_at: item.is_open ? item.closes_at : null,
-        break_starts_at: item.is_open ? item.break_starts_at : null,
-        break_ends_at: item.is_open ? item.break_ends_at : null,
-      })
-      if (result.error) {
-        setError(friendlySettingsError(result.error))
-        setIsSavingHours(false)
-        return
+
+    try {
+      for (const item of state.hours) {
+        const result = await updateBusinessHour(item.weekday, {
+          is_open: item.is_open,
+          opens_at: item.is_open ? item.opens_at : null,
+          closes_at: item.is_open ? item.closes_at : null,
+          break_starts_at: item.is_open ? item.break_starts_at : null,
+          break_ends_at: item.is_open ? item.break_ends_at : null,
+        })
+        if (result.error) {
+          setError(friendlySettingsError(result.error))
+          return
+        }
       }
+      setFeedback('Expediente atualizado com sucesso.')
+      setLoadAttempt((attempt) => attempt + 1)
+    } catch {
+      setError('Não foi possível conectar ao serviço. Tente novamente.')
+    } finally {
+      setIsSavingHours(false)
     }
-    setFeedback('Expediente atualizado com sucesso.')
-    setIsSavingHours(false)
-    setLoadAttempt((attempt) => attempt + 1)
   }
 
   async function saveBlock(event: FormEvent<HTMLFormElement>) {
@@ -150,41 +166,64 @@ export function SettingsPage() {
       return
     }
     setIsSavingBlock(true)
-    const result = await createScheduleBlock({
-      starts_at: startsAt,
-      ends_at: endsAt,
-      reason: blockReason.trim() || null,
-    })
-    if (result.error) {
-      setError(friendlySettingsError(result.error))
+
+    try {
+      const result = await createScheduleBlock({
+        starts_at: startsAt,
+        ends_at: endsAt,
+        reason: blockReason.trim() || null,
+      })
+      if (result.error) {
+        setError(friendlySettingsError(result.error))
+        return
+      }
+      setBlockStart('')
+      setBlockEnd('')
+      setBlockReason('')
+      setFeedback('Bloqueio criado com sucesso.')
+      setLoadAttempt((attempt) => attempt + 1)
+    } catch {
+      setError('Não foi possível conectar ao serviço. Tente novamente.')
+    } finally {
       setIsSavingBlock(false)
-      return
     }
-    setBlockStart('')
-    setBlockEnd('')
-    setBlockReason('')
-    setFeedback('Bloqueio criado com sucesso.')
-    setIsSavingBlock(false)
-    setLoadAttempt((attempt) => attempt + 1)
   }
 
   async function removeBlock(id: number) {
     if (deletingId !== null) return
+    const block =
+      state.status === 'loaded'
+        ? state.blocks.find((item) => item.id === id)
+        : undefined
+    const blockName = block?.reason?.trim() || 'este período bloqueado'
+    if (!window.confirm(`Excluir ${blockName}? Esta ação não pode ser desfeita.`)) {
+      return
+    }
+
     setDeletingId(id)
     setFeedback(null)
     setError(null)
-    const result = await deleteScheduleBlock(id)
-    if (result.error) {
-      setError(friendlySettingsError(result.error))
-    } else {
-      setFeedback('Bloqueio excluído com sucesso.')
-      setState((current) =>
-        current.status === 'loaded'
-          ? { ...current, blocks: current.blocks.filter((item) => item.id !== id) }
-          : current,
-      )
+
+    try {
+      const result = await deleteScheduleBlock(id)
+      if (result.error) {
+        setError(friendlySettingsError(result.error))
+      } else {
+        setFeedback('Bloqueio excluído com sucesso.')
+        setState((current) =>
+          current.status === 'loaded'
+            ? {
+                ...current,
+                blocks: current.blocks.filter((item) => item.id !== id),
+              }
+            : current,
+        )
+      }
+    } catch {
+      setError('Não foi possível conectar ao serviço. Tente novamente.')
+    } finally {
+      setDeletingId(null)
     }
-    setDeletingId(null)
   }
 
   if (state.status === 'loading') {
@@ -216,7 +255,13 @@ export function SettingsPage() {
 
       <form className="settings-panel" onSubmit={saveHours}>
         <div className="section-heading">
-          <div><span className="eyebrow">Semana</span><h3>Expediente e intervalos</h3></div>
+          <div>
+            <span className="eyebrow">Semana</span>
+            <h3>Expediente e intervalos</h3>
+            <p className="section-heading__description">
+              Defina os horários disponíveis em cada dia da semana.
+            </p>
+          </div>
           <button className="primary-button" type="submit" disabled={isSavingHours}>
             {isSavingHours ? 'Salvando…' : 'Salvar expediente'}
           </button>
@@ -240,7 +285,15 @@ export function SettingsPage() {
       </form>
 
       <section className="settings-panel" aria-labelledby="blocks-title">
-        <div className="section-heading"><div><span className="eyebrow">Exceções</span><h3 id="blocks-title">Bloqueios e folgas</h3></div></div>
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Exceções</span>
+            <h3 id="blocks-title">Bloqueios e folgas</h3>
+            <p className="section-heading__description">
+              Reserve períodos em que o salão não receberá agendamentos.
+            </p>
+          </div>
+        </div>
         <form className="schedule-block-form" onSubmit={saveBlock}>
           <label>Início<input type="datetime-local" min={`${salonDateValue()}T00:00`} value={blockStart} onChange={(event) => setBlockStart(event.target.value)} required disabled={isSavingBlock} /></label>
           <label>Fim<input type="datetime-local" min={blockStart || `${salonDateValue()}T00:00`} value={blockEnd} onChange={(event) => setBlockEnd(event.target.value)} required disabled={isSavingBlock} /></label>
@@ -248,7 +301,10 @@ export function SettingsPage() {
           <button className="primary-button" type="submit" disabled={isSavingBlock}>{isSavingBlock ? 'Criando…' : 'Criar bloqueio'}</button>
         </form>
         {state.blocks.length === 0 ? (
-          <p className="settings-empty">Nenhum bloqueio cadastrado.</p>
+          <p className="settings-empty settings-empty--intentional">
+            Nenhum bloqueio ou folga cadastrado. A agenda está livre conforme o
+            expediente semanal.
+          </p>
         ) : (
           <ul className="schedule-block-list">
             {state.blocks.map((block) => {

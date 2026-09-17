@@ -452,6 +452,12 @@ export function ClientsPage() {
     }
   }, [loadAttempt])
 
+  useEffect(() => {
+    if (!saveSuccess) return
+    const timeoutId = window.setTimeout(() => setSaveSuccess(null), 5_000)
+    return () => window.clearTimeout(timeoutId)
+  }, [saveSuccess])
+
   const clients =
     loadState.status === 'loaded' ? loadState.clients : emptyClients
   const visibleClients = useMemo(
@@ -573,8 +579,15 @@ export function ClientsPage() {
       {loadState.status === 'loaded' && clients.length === 0 && (
         <div className="clients-state" role="status">
           <span className="eyebrow">Base de clientes</span>
-          <h3>Nenhum cliente cadastrado.</h3>
-          <p>Os clientes aparecerão aqui quando o cadastro estiver disponível.</p>
+          <h3>Nenhuma cliente cadastrada ainda.</h3>
+          <p>Adicione a primeira cliente para começar a organizar a agenda.</p>
+          <button
+            className="primary-button clients-state__button"
+            type="button"
+            onClick={openCreateDialog}
+          >
+            Adicionar cliente
+          </button>
         </div>
       )}
 

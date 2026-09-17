@@ -120,7 +120,7 @@ begin
   complete_sql := format(
     'select * from public.complete_booking(%s, date %L, array[%s::bigint])',
     booking_to_complete,
-    '2026-12-20',
+    '2020-12-20',
     service_to_perform
   );
 

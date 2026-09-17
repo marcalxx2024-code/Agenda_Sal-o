@@ -46,7 +46,7 @@ export async function listPendingReturns(
   const { data, error } = await supabase
     .from('pending_returns')
     .select(
-      'id, due_on, contacted_at, contact_note, performed_on, client_id, client_name, client_phone, service_name, return_interval_months',
+      'id, due_on, contacted_at, contact_note, performed_on, client_id, client_name, client_phone, service_name, return_interval_months, appointment_id, appointment_service_id, service_id, return_interval_days, client_phone_normalized, days_until_due, status, resolved_at',
     )
     .order('due_on', { ascending: true })
     .order('id', { ascending: true })

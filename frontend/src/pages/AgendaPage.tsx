@@ -162,6 +162,12 @@ export function AgendaPage() {
   }, [])
 
   useEffect(() => {
+    if (!saveSuccess) return
+    const timeoutId = window.setTimeout(() => setSaveSuccess(null), 5_000)
+    return () => window.clearTimeout(timeoutId)
+  }, [saveSuccess])
+
+  useEffect(() => {
     let isCurrent = true
 
     void listBookings(appliedFilters)
@@ -335,6 +341,12 @@ export function AgendaPage() {
       </header>
 
       <form className="agenda-filters" onSubmit={applyFilters}>
+        <div className="agenda-filters__heading">
+          <div>
+            <strong>Filtrar agenda</strong>
+            <span>Escolha um período ou use um atalho rápido.</span>
+          </div>
+        </div>
         <div className="agenda-filters__quick" aria-label="Períodos rápidos">
           <button type="button" onClick={() => applyQuickPeriod(1)}>Hoje</button>
           <button type="button" onClick={() => applyQuickPeriod(7)}>Próximos 7 dias</button>

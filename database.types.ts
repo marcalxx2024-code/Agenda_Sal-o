@@ -15,6 +15,7 @@ export type Database = {
           created_at: string
           id: number
           return_due_on: string | null
+          return_interval_days: number | null
           return_interval_months: number | null
           service_id: number
           service_name: string
@@ -24,6 +25,7 @@ export type Database = {
           created_at?: string
           id?: never
           return_due_on?: string | null
+          return_interval_days?: number | null
           return_interval_months?: number | null
           service_id: number
           service_name?: string
@@ -33,6 +35,7 @@ export type Database = {
           created_at?: string
           id?: never
           return_due_on?: string | null
+          return_interval_days?: number | null
           return_interval_months?: number | null
           service_id?: number
           service_name?: string
@@ -44,6 +47,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "appointments"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointment_services_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "pending_returns"
+            referencedColumns: ["appointment_id"]
           },
           {
             foreignKeyName: "appointment_services_service_id_fkey"
@@ -270,6 +280,7 @@ export type Database = {
           created_at: string
           due_on: string
           id: number
+          resolved_at: string | null
           status: string
           updated_at: string
         }
@@ -280,6 +291,7 @@ export type Database = {
           created_at?: string
           due_on: string
           id?: never
+          resolved_at?: string | null
           status?: string
           updated_at?: string
         }
@@ -290,6 +302,7 @@ export type Database = {
           created_at?: string
           due_on?: string
           id?: never
+          resolved_at?: string | null
           status?: string
           updated_at?: string
         }
@@ -300,6 +313,13 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "appointment_services"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "returns_appointment_service_id_fkey"
+            columns: ["appointment_service_id"]
+            isOneToOne: true
+            referencedRelation: "pending_returns"
+            referencedColumns: ["appointment_service_id"]
           },
         ]
       }
@@ -337,6 +357,7 @@ export type Database = {
           estimated_duration_minutes: number | null
           id: number
           name: string
+          suggested_return_days: number | null
           suggested_return_months: number | null
           updated_at: string
         }
@@ -346,6 +367,7 @@ export type Database = {
           estimated_duration_minutes?: number | null
           id?: never
           name: string
+          suggested_return_days?: number | null
           suggested_return_months?: number | null
           updated_at?: string
         }
@@ -355,6 +377,7 @@ export type Database = {
           estimated_duration_minutes?: number | null
           id?: never
           name?: string
+          suggested_return_days?: number | null
           suggested_return_months?: number | null
           updated_at?: string
         }
@@ -364,18 +387,34 @@ export type Database = {
     Views: {
       pending_returns: {
         Row: {
+          appointment_id: number | null
+          appointment_service_id: number | null
           client_id: number | null
           client_name: string | null
           client_phone: string | null
+          client_phone_normalized: string | null
           contact_note: string | null
           contacted_at: string | null
+          days_until_due: number | null
           due_on: string | null
           id: number | null
           performed_on: string | null
+          resolved_at: string | null
+          return_interval_days: number | null
           return_interval_months: number | null
+          service_id: number | null
           service_name: string | null
+          status: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "appointment_services_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {
@@ -466,6 +505,7 @@ export type Database = {
           status: string
         }[]
       }
+      normalize_whatsapp_phone: { Args: { p_phone: string }; Returns: string }
       update_booking: {
         Args: {
           p_booking_id: number

@@ -81,6 +81,17 @@ execute a instrução uma única vez. Abrir o WhatsApp futuramente não deverá
 preencher `contacted_at`; esse campo só deve ser atualizado após confirmação
 humana de que o contato foi realmente feito.
 
+No ambiente local, depois de cada `supabase db reset`, recrie primeiro a conta
+`admin.monica@gmail.com` pelo Supabase Auth local e execute:
+
+```powershell
+npm.cmd run db:authorize-local-admin
+```
+
+Esse comando consulta o UID recém-criado e o adiciona de forma idempotente à
+allowlist do container local `supabase_db_agenda-salao`. Ele não cria usuário,
+não armazena senha e não acessa o projeto remoto.
+
 ## Pré-requisitos
 
 - Docker Desktop instalado e em execução.

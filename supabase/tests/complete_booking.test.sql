@@ -145,7 +145,7 @@ select is(
     select booking_status
     from public.complete_booking(
       (select id from main_booking_before),
-      date '2026-10-15',
+      date '2020-10-15',
       array[
         (select id from public.services where name = 'Conclusao A'),
         (select id from public.services where name = 'Conclusao C sem retorno')
@@ -178,7 +178,7 @@ select is(
 select is(
   (select a.performed_on from public.appointments a
    where a.booking_id = (select id from main_booking_before)),
-  date '2026-10-15',
+  date '2020-10-15',
   'performed_on usa a data efetiva informada'
 );
 select is(
@@ -218,7 +218,7 @@ select is(
    join public.appointment_services aps on aps.id = r.appointment_service_id
    join public.appointments a on a.id = aps.appointment_id
    where a.booking_id = (select id from main_booking_before)),
-  date '2026-11-15',
+  date '2020-11-15',
   'retorno usa performed_on e snapshot da regra existente'
 );
 select ok(
@@ -286,7 +286,7 @@ select is(
     select booking_status
     from public.complete_booking(
       (select id from public.bookings where notes = 'Conclusao confirmed'),
-      date '2026-10-16',
+      date '2020-10-16',
       array[(select id from public.services where name = 'Conclusao A')]
     )
   ),
@@ -313,7 +313,7 @@ select is(
     select service_count
     from public.complete_booking(
       (select id from public.bookings where notes = 'Conclusao todos planejados'),
-      date '2026-10-17',
+      date '2020-10-17',
       array[
         (select id from public.services where name = 'Conclusao A'),
         (select id from public.services where name = 'Conclusao B')
@@ -342,7 +342,7 @@ where name = 'Conclusao Planejado Inativar';
 select lives_ok(
   $$select * from public.complete_booking(
       (select id from public.bookings where notes = 'Conclusao planejado inativo'),
-      date '2026-10-18',
+      date '2020-10-18',
       array[(select id from public.services
              where name = 'Conclusao Planejado Inativar')]
     )$$,
@@ -371,7 +371,7 @@ select lives_ok(
 select throws_ok(
   $$select * from public.complete_booking(
       (select id from public.bookings where notes = 'Rejeitar inativo nao planejado'),
-      date '2026-10-19',
+      date '2020-10-19',
       array[
         (select id from public.services where name = 'Conclusao A'),
         (select id from public.services
@@ -393,7 +393,7 @@ select is(
 select throws_ok(
   $$select * from public.complete_booking(
       (select id from public.bookings where notes = 'Rejeitar inativo nao planejado'),
-      date '2026-10-19',
+      date '2020-10-19',
       array[]::bigint[]
     )$$,
   '22023',
@@ -403,7 +403,7 @@ select throws_ok(
 select throws_ok(
   $$select * from public.complete_booking(
       (select id from public.bookings where notes = 'Rejeitar inativo nao planejado'),
-      date '2026-10-19',
+      date '2020-10-19',
       array[
         (select id from public.services where name = 'Conclusao A'),
         null
@@ -416,7 +416,7 @@ select throws_ok(
 select throws_ok(
   $$select * from public.complete_booking(
       (select id from public.bookings where notes = 'Rejeitar inativo nao planejado'),
-      date '2026-10-19',
+      date '2020-10-19',
       array[
         (select id from public.services where name = 'Conclusao A'),
         (select id from public.services where name = 'Conclusao A')
@@ -429,7 +429,7 @@ select throws_ok(
 select throws_ok(
   $$select * from public.complete_booking(
       (select id from public.bookings where notes = 'Rejeitar inativo nao planejado'),
-      date '2026-10-19',
+      date '2020-10-19',
       array[999999999::bigint]
     )$$,
   '23503',
@@ -457,7 +457,7 @@ select lives_ok(
 select throws_ok(
   $$select * from public.complete_booking(
       (select id from public.bookings where notes = 'Conclusao cancelada'),
-      date '2026-10-20',
+      date '2020-10-20',
       array[(select id from public.services where name = 'Conclusao A')]
     )$$,
   '55000',
@@ -497,7 +497,7 @@ set local "request.jwt.claims" =
 select throws_ok(
   $$select * from public.complete_booking(
       (select id from public.bookings where notes = 'Conclusao no show'),
-      date '2026-10-20',
+      date '2020-10-20',
       array[(select id from public.services where name = 'Conclusao A')]
     )$$,
   '55000',
@@ -508,7 +508,7 @@ select throws_ok(
 select throws_ok(
   $$select * from public.complete_booking(
       (select id from public.bookings where notes = 'Completed inconsistente'),
-      date '2026-10-20',
+      date '2020-10-20',
       array[(select id from public.services where name = 'Conclusao A')]
     )$$,
   'XX000',
@@ -539,7 +539,7 @@ set local "request.jwt.claims" =
 select throws_ok(
   $$select * from public.complete_booking(
       (select id from public.bookings where notes = 'Falha appointment'),
-      date '2026-10-21',
+      date '2020-10-21',
       array[(select id from public.services where name = 'Conclusao A')],
       'Falhar appointment'
     )$$,
@@ -586,7 +586,7 @@ set local "request.jwt.claims" =
 select throws_ok(
   $$select * from public.complete_booking(
       (select id from public.bookings where notes = 'Falha appointment service'),
-      date '2026-10-22',
+      date '2020-10-22',
       array[(select id from public.services where name = 'Conclusao A')]
     )$$,
   '23514',
@@ -625,14 +625,14 @@ select lives_ok(
 reset role;
 alter table public.returns
 add constraint test_reject_complete_return
-check (due_on is distinct from date '2027-01-23') not valid;
+check (due_on is distinct from date '2021-01-23') not valid;
 set local role authenticated;
 set local "request.jwt.claims" =
   '{"sub":"d0000000-0000-4000-8000-00000000000d","role":"authenticated"}';
 select throws_ok(
   $$select * from public.complete_booking(
       (select id from public.bookings where notes = 'Falha return'),
-      date '2026-11-23',
+      date '2020-11-23',
       array[(select id from public.services where name = 'Conclusao B')]
     )$$,
   '23514',
@@ -743,7 +743,7 @@ select is(
 select lives_ok(
   $$select * from public.create_appointment_with_services(
       (select id from public.clients where name = 'Cliente Conclusao'),
-      date '2026-12-01',
+      date '2020-12-01',
       array[(select id from public.services where name = 'Conclusao A')],
       'Atendimento avulso regressao'
     )$$,
@@ -769,7 +769,7 @@ set local "request.jwt.claims" =
   '{"sub":"e0000000-0000-4000-8000-00000000000e","role":"authenticated"}';
 select throws_ok(
   $$select * from public.complete_booking(
-      999999999, date '2026-10-20', array[999999999::bigint]
+      999999999, date '2020-10-20', array[999999999::bigint]
     )$$,
   '42501',
   'only the authorized salon account can complete bookings',
@@ -779,7 +779,7 @@ set local role anon;
 set local "request.jwt.claims" = '{"role":"anon"}';
 select throws_ok(
   $$select * from public.complete_booking(
-      999999999, date '2026-10-20', array[999999999::bigint]
+      999999999, date '2020-10-20', array[999999999::bigint]
     )$$,
   '42501',
   'permission denied for function complete_booking',

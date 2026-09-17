@@ -624,6 +624,12 @@ export function ServicesPage() {
     }
   }, [loadAttempt])
 
+  useEffect(() => {
+    if (!saveSuccess) return
+    const timeoutId = window.setTimeout(() => setSaveSuccess(null), 5_000)
+    return () => window.clearTimeout(timeoutId)
+  }, [saveSuccess])
+
   const services =
     loadState.status === 'loaded' ? loadState.services : emptyServices
   const visibleServices = useMemo(
@@ -745,8 +751,15 @@ export function ServicesPage() {
       {loadState.status === 'loaded' && services.length === 0 && (
         <div className="services-state" role="status">
           <span className="eyebrow">Catálogo de serviços</span>
-          <h3>Nenhum serviço cadastrado.</h3>
-          <p>Os serviços aparecerão aqui quando forem cadastrados.</p>
+          <h3>Nenhum serviço cadastrado ainda.</h3>
+          <p>Adicione o primeiro serviço para disponibilizá-lo na agenda.</p>
+          <button
+            className="primary-button services-state__button"
+            type="button"
+            onClick={openCreateDialog}
+          >
+            Adicionar serviço
+          </button>
         </div>
       )}
 

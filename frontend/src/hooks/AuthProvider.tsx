@@ -46,16 +46,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setAuthorizationError(null)
     }
 
-    void supabase.auth.getSession().then(({ data, error }) => {
-      if (!isMounted) return
-
-      if (error) {
-        applySession(null)
-      } else {
-        applySession(data.session)
-      }
-      setIsRestoringSession(false)
-    })
+    void supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (!isMounted) return
+        applySession(error ? null : data.session)
+      })
+      .catch(() => {
+        if (isMounted) applySession(null)
+      })
+      .finally(() => {
+        if (isMounted) setIsRestoringSession(false)
+      })
 
     const {
       data: { subscription },
@@ -77,9 +79,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     let isCurrent = true
 
-    void supabase
-      .rpc('has_salon_access')
-      .then(({ data, error }) => {
+    void (async () => {
+      try {
+        const { data, error } = await supabase.rpc('has_salon_access')
         if (!isCurrent) return
 
         if (!error && typeof data === 'boolean') {
@@ -91,7 +93,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setAuthorizationError(
           'Não foi possível verificar seu acesso. Tente novamente.',
         )
-      })
+      } catch {
+        if (!isCurrent) return
+        setAuthorizationStatus('error')
+        setAuthorizationError(
+          'Não foi possível verificar seu acesso. Tente novamente.',
+        )
+      }
+    })()
 
     return () => {
       isCurrent = false
@@ -111,42 +120,66 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setAuthorizationAttempt((attempt) => attempt + 1)
       },
       async signIn(email: string, password: string): Promise<AuthActionResult> {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
+        try {
+          const { error } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          })
 
-        return { error: error ? friendlyAuthError(error.message) : null }
+          return { error: error ? friendlyAuthError(error.message) : null }
+        } catch {
+          return {
+            error: 'Não foi possível conectar ao serviço. Tente novamente.',
+          }
+        }
       },
       async requestPasswordReset(
         email: string,
         redirectTo: string,
       ): Promise<AuthActionResult> {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo,
-        })
-        return {
-          error: error
-            ? 'Não foi possível enviar o link de recuperação. Verifique o e-mail e tente novamente.'
-            : null,
+        try {
+          const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo,
+          })
+          return {
+            error: error
+              ? 'Não foi possível enviar o link de recuperação. Verifique o e-mail e tente novamente.'
+              : null,
+          }
+        } catch {
+          return {
+            error: 'Não foi possível conectar ao serviço. Tente novamente.',
+          }
         }
       },
       async updatePassword(password: string): Promise<AuthActionResult> {
-        const { error } = await supabase.auth.updateUser({ password })
-        if (!error) setIsPasswordRecovery(false)
-        return {
-          error: error
-            ? 'Não foi possível definir a nova senha. Solicite outro link e tente novamente.'
-            : null,
+        try {
+          const { error } = await supabase.auth.updateUser({ password })
+          if (!error) setIsPasswordRecovery(false)
+          return {
+            error: error
+              ? 'Não foi possível definir a nova senha. Solicite outro link e tente novamente.'
+              : null,
+          }
+        } catch {
+          return {
+            error: 'Não foi possível conectar ao serviço. Tente novamente.',
+          }
         }
       },
       async signOut(): Promise<AuthActionResult> {
-        const { error } = await supabase.auth.signOut()
+        try {
+          const { error } = await supabase.auth.signOut()
 
-        return {
-          error: error
-            ? 'Não foi possível sair agora. Tente novamente.'
-            : null,
+          return {
+            error: error
+              ? 'Não foi possível sair agora. Tente novamente.'
+              : null,
+          }
+        } catch {
+          return {
+            error: 'Não foi possível conectar ao serviço. Tente novamente.',
+          }
         }
       },
     }),
