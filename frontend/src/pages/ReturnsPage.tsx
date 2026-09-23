@@ -10,6 +10,11 @@ import {
   formatDateOnly,
   salonDateTimeFormatter,
 } from '../lib/salon-time'
+import {
+  createActionSubmissionGuard,
+  openWhatsappForReturn,
+  validWhatsappPhone,
+} from '../lib/return-actions'
 
 type ReturnsState =
   | { status: 'loading' }
@@ -63,18 +68,6 @@ function returnStatus(status: string | null) {
   return statuses[status ?? ''] ?? { label: 'Pendente', tone: 'scheduled' }
 }
 
-function validWhatsappPhone(phone: string | null) {
-  return phone !== null && /^\d{10,15}$/.test(phone)
-}
-
-function whatsappMessage(item: PendingReturn) {
-  const firstName = item.client_name?.trim().split(/\s+/)[0]
-  const service = item.service_name?.trim() || 'seu serviço'
-  const greeting = firstName ? `Olá, ${firstName}! Tudo bem?` : 'Olá! Tudo bem?'
-
-  return `${greeting}\n\nAqui é do salão Monica Lugo.\n\nJá está chegando o período recomendado para o seu retorno de ${service}.\n\nSe quiser, podemos combinar um novo horário.`
-}
-
 function friendlyActionError(error: ReturnsDataError) {
   if (error.code === 'P0002' || error.code === 'PGRST116') {
     return 'Este retorno não está mais pendente. A lista será atualizada.'
@@ -104,6 +97,7 @@ function ReturnActionDialog({
   onInvalidated,
 }: ReturnActionDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const submissionGuardRef = useRef(createActionSubmissionGuard())
   const [note, setNote] = useState(item.contact_note ?? '')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -121,7 +115,13 @@ function ReturnActionDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (isSubmitting || item.id === null) return
+    if (
+      isSubmitting ||
+      item.id === null ||
+      !submissionGuardRef.current.tryStart()
+    ) {
+      return
+    }
     setIsSubmitting(true)
     setError(null)
 
@@ -134,6 +134,7 @@ function ReturnActionDialog({
         : await updateReturnStatus(item.id, action)
 
       if (result.error) {
+        submissionGuardRef.current.reset()
         const invalidated = ['P0002', 'PGRST116'].includes(result.error.code)
         if (invalidated) onInvalidated()
         setError(friendlyActionError(result.error))
@@ -141,6 +142,7 @@ function ReturnActionDialog({
         return
       }
 
+      submissionGuardRef.current.succeed()
       onSuccess(
         isContact
           ? 'Contato registrado com sucesso.'
@@ -149,6 +151,7 @@ function ReturnActionDialog({
             : 'Retorno cancelado com sucesso.',
       )
     } catch {
+      submissionGuardRef.current.reset()
       setError('Não foi possível conectar ao serviço. Tente novamente.')
       setIsSubmitting(false)
     }
@@ -241,7 +244,6 @@ export function ReturnsPage() {
   const [success, setSuccess] = useState<string | null>(null)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
-  const [contactingId, setContactingId] = useState<number | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -302,74 +304,28 @@ export function ReturnsPage() {
     }
   }
 
-  async function openWhatsapp(item: PendingReturn) {
-    if (
-      contactingId !== null ||
-      item.id === null ||
-      !validWhatsappPhone(item.client_phone_normalized)
-    ) {
-      return
-    }
-
+  function openWhatsapp(item: PendingReturn) {
     setSuccess(null)
     setActionError(null)
-    const link = `https://wa.me/${item.client_phone_normalized}?text=${encodeURIComponent(whatsappMessage(item))}`
-    const whatsappWindow = window.open(link, '_blank')
+    const result = openWhatsappForReturn(
+      {
+        clientName: item.client_name,
+        normalizedPhone: item.client_phone_normalized,
+        serviceName: item.service_name,
+      },
+      (url, target) => window.open(url, target),
+    )
 
-    if (!whatsappWindow) {
+    if (result === 'invalid-phone') return
+    if (result === 'blocked') {
       setActionError(
         'Não foi possível abrir o WhatsApp. Permita a abertura de novas janelas e tente novamente.',
       )
       return
     }
-
-    try {
-      whatsappWindow.opener = null
-    } catch {
-      // Some browsers protect WindowProxy properties after handing the URL to
-      // the installed WhatsApp app. The link was already opened successfully.
-    }
-
-    setContactingId(item.id)
-
-    try {
-      const result = await markReturnContacted({ p_return_id: item.id })
-
-      if (result.error) {
-        const invalidated = ['P0002', 'PGRST116', '55000'].includes(
-          result.error.code,
-        )
-        setActionError(
-          `O WhatsApp foi aberto, mas ${friendlyActionError(result.error).toLocaleLowerCase('pt-BR')}`,
-        )
-        if (invalidated) reload()
-        return
-      }
-
-      setState((current) =>
-        current.status === 'loaded'
-          ? {
-              ...current,
-              returns: current.returns.map((currentItem) =>
-                currentItem.id === item.id
-                  ? {
-                      ...currentItem,
-                      contacted_at: result.data.contacted_at,
-                      status: 'contacted',
-                    }
-                  : currentItem,
-              ),
-            }
-          : current,
-      )
-      setSuccess('WhatsApp aberto e contato registrado como Contatada.')
-    } catch {
-      setActionError(
-        'O WhatsApp foi aberto, mas não foi possível registrar o contato. Tente registrar novamente.',
-      )
-    } finally {
-      setContactingId(null)
-    }
+    setSuccess(
+      'WhatsApp aberto. Depois de realizar o contato, confirme em "Marcar como contatado".',
+    )
   }
 
   return (
@@ -486,19 +442,17 @@ export function ReturnsPage() {
                   <button
                     className="return-card__whatsapp"
                     type="button"
-                    onClick={() => void openWhatsapp(item)}
-                    disabled={!hasWhatsapp || contactingId !== null}
+                    onClick={() => openWhatsapp(item)}
+                    disabled={!hasWhatsapp}
                     aria-label={
                       hasWhatsapp
                         ? `Avisar ${item.client_name ?? 'cliente'} pelo WhatsApp`
                         : 'WhatsApp indisponível: telefone inválido ou não cadastrado'
                     }
                   >
-                    {contactingId === item.id
-                      ? 'Registrando contato…'
-                      : hasWhatsapp
-                        ? 'Avisar pelo WhatsApp'
-                        : 'Telefone inválido ou não cadastrado'}
+                    {hasWhatsapp
+                      ? 'Avisar pelo WhatsApp'
+                      : 'Telefone inválido ou não cadastrado'}
                   </button>
                   <button
                     type="button"

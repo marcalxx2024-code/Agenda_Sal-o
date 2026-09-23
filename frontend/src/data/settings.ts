@@ -4,14 +4,39 @@ import type { Database } from '../types/database'
 
 export type BusinessHour = Database['public']['Tables']['business_hours']['Row']
 export type ScheduleBlock = Database['public']['Tables']['schedule_blocks']['Row']
-export type BusinessHourUpdate = Pick<
-  Database['public']['Tables']['business_hours']['Update'],
-  'is_open' | 'opens_at' | 'closes_at' | 'break_starts_at' | 'break_ends_at'
->
 export type ScheduleBlockInsert = Pick<
   Database['public']['Tables']['schedule_blocks']['Insert'],
   'starts_at' | 'ends_at' | 'reason'
 >
+export type BusinessHoursWeekInput = Array<
+  Pick<
+    BusinessHour,
+    | 'weekday'
+    | 'is_open'
+    | 'opens_at'
+    | 'closes_at'
+    | 'break_starts_at'
+    | 'break_ends_at'
+  >
+>
+
+export interface AffectedBooking {
+  id: number
+  client_id: number
+  client_name: string
+  starts_at: string
+  ends_at: string
+  status: string
+}
+
+export interface BusinessHoursWeekResult {
+  updated: boolean
+  requiresConfirmation: boolean
+  conflictsChanged: boolean
+  affectedBookingCount: number
+  affectedBookingIds: number[]
+  affectedBookings: AffectedBooking[]
+}
 
 export interface SettingsDataError {
   code: string
@@ -39,17 +64,62 @@ export async function listBusinessHours(): Promise<Result<BusinessHour[]>> {
   return error ? { data: null, error: toError(error) } : { data, error: null }
 }
 
-export async function updateBusinessHour(
-  weekday: number,
-  values: BusinessHourUpdate,
-): Promise<Result<BusinessHour>> {
+function parseAffectedBookings(value: unknown): AffectedBooking[] {
+  if (!Array.isArray(value)) return []
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const booking = item as Record<string, unknown>
+    if (
+      typeof booking.id !== 'number' ||
+      typeof booking.client_id !== 'number' ||
+      typeof booking.client_name !== 'string' ||
+      typeof booking.starts_at !== 'string' ||
+      typeof booking.ends_at !== 'string' ||
+      typeof booking.status !== 'string'
+    ) {
+      return []
+    }
+
+    return [
+      {
+        id: booking.id,
+        client_id: booking.client_id,
+        client_name: booking.client_name,
+        starts_at: booking.starts_at,
+        ends_at: booking.ends_at,
+        status: booking.status,
+      },
+    ]
+  })
+}
+
+export async function updateBusinessHoursWeek(
+  hours: BusinessHoursWeekInput,
+  confirmConflicts = false,
+  expectedAffectedBookingIds: number[] | null = null,
+): Promise<Result<BusinessHoursWeekResult>> {
   const { data, error } = await supabase
-    .from('business_hours')
-    .update(values)
-    .eq('weekday', weekday)
-    .select('*')
+    .rpc('update_business_hours_week', {
+      p_hours: hours,
+      p_confirm_conflicts: confirmConflicts,
+      p_expected_affected_booking_ids: expectedAffectedBookingIds,
+    })
     .single()
-  return error ? { data: null, error: toError(error) } : { data, error: null }
+
+  if (error) return { data: null, error: toError(error) }
+
+  return {
+    data: {
+      updated: data.updated,
+      requiresConfirmation: data.requires_confirmation,
+      conflictsChanged: data.conflicts_changed,
+      affectedBookingCount: data.affected_booking_count,
+      affectedBookingIds: data.affected_booking_ids,
+      affectedBookings: parseAffectedBookings(data.affected_bookings),
+    },
+    error: null,
+  }
 }
 
 export async function listScheduleBlocks(): Promise<Result<ScheduleBlock[]>> {

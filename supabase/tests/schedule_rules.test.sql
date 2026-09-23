@@ -35,6 +35,9 @@ from (
   select ((statement_timestamp() at time zone 'America/Sao_Paulo')::date + 30) as local_day
 ) anchor;
 
+-- Fixtures de expediente sao preparadas pelo owner. Depois da migration da
+-- atualizacao semanal, authenticated altera essas linhas somente pela RPC.
+reset role;
 update public.business_hours
 set is_open = false,
     opens_at = null,
@@ -50,6 +53,10 @@ set is_open = true,
 where weekday = (
   select extract(dow from local_day)::smallint from schedule_clock
 );
+
+set local role authenticated;
+set local "request.jwt.claims" =
+  '{"sub":"a1000000-0000-4000-8000-000000000001","role":"authenticated"}';
 
 select lives_ok(
   $$select * from public.create_booking(

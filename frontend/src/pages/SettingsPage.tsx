@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   createScheduleBlock,
   deleteScheduleBlock,
   listBusinessHours,
   listScheduleBlocks,
-  updateBusinessHour,
+  updateBusinessHoursWeek,
+  type AffectedBooking,
   type BusinessHour,
+  type BusinessHoursWeekInput,
+  type BusinessHoursWeekResult,
   type ScheduleBlock,
   type SettingsDataError,
 } from '../data/settings'
@@ -56,10 +59,143 @@ function friendlySettingsError(error: SettingsDataError) {
   if (error.code === '23514') {
     return 'Revise os horários: abertura, intervalo e fechamento devem estar em ordem.'
   }
+  if (error.code === '22023') {
+    return 'Revise todos os dias: a semana precisa estar completa e os horários devem ser válidos.'
+  }
+  if (error.code === '55000') {
+    return 'A configuração semanal está incompleta no banco. Recarregue a página e tente novamente.'
+  }
   if (error.code === '42501' || error.code.startsWith('PGRST3')) {
     return 'Sua sessão não possui permissão para alterar as configurações.'
   }
   return 'Não foi possível salvar a configuração. Tente novamente.'
+}
+
+interface HoursConfirmation {
+  hours: BusinessHoursWeekInput
+  result: BusinessHoursWeekResult
+}
+
+interface BusinessHoursConflictDialogProps {
+  bookings: AffectedBooking[]
+  conflictsChanged: boolean
+  error: string | null
+  isSubmitting: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}
+
+function BusinessHoursConflictDialog({
+  bookings,
+  conflictsChanged,
+  error,
+  isSubmitting,
+  onCancel,
+  onConfirm,
+}: BusinessHoursConflictDialogProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (dialog && !dialog.open) dialog.showModal()
+  }, [])
+
+  return (
+    <dialog
+      className="client-dialog client-active-dialog"
+      ref={dialogRef}
+      aria-labelledby="business-hours-conflicts-title"
+      onClose={onCancel}
+      onCancel={(event) => {
+        if (isSubmitting) event.preventDefault()
+      }}
+    >
+      <div className="client-form">
+        <header className="client-dialog__header">
+          <div>
+            <span className="eyebrow">Agendamentos preservados</span>
+            <h2 id="business-hours-conflicts-title">
+              Confirmar novo expediente?
+            </h2>
+            <p>
+              Nenhum agendamento será cancelado ou alterado automaticamente.
+            </p>
+          </div>
+          <button
+            className="client-dialog__close"
+            type="button"
+            aria-label="Fechar confirmação do expediente"
+            onClick={() => !isSubmitting && dialogRef.current?.close()}
+            disabled={isSubmitting}
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="client-active-dialog__body">
+          {conflictsChanged && (
+            <p className="client-form__submit-error" role="alert">
+              A lista mudou enquanto você confirmava. Revise os agendamentos e
+              confirme novamente.
+            </p>
+          )}
+          {error && (
+            <p className="client-form__submit-error" role="alert">
+              {error}
+            </p>
+          )}
+          <p>
+            Os horários abaixo ficarão fora do novo expediente, mas continuarão
+            ativos:
+          </p>
+          <ul className="business-hours-conflict-list">
+            {bookings.map((booking) => {
+              const start = new Date(booking.starts_at)
+              const end = new Date(booking.ends_at)
+              return (
+                <li key={booking.id}>
+                  <strong>{booking.client_name}</strong>
+                  <span>
+                    {blockFormatter.format(start)} até {blockFormatter.format(end)}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+
+        <footer className="client-form__actions">
+          <button
+            className="client-form__cancel"
+            type="button"
+            onClick={() => !isSubmitting && dialogRef.current?.close()}
+            disabled={isSubmitting}
+          >
+            Voltar e revisar
+          </button>
+          <button
+            className="primary-button client-form__submit"
+            type="button"
+            onClick={onConfirm}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Confirmando…' : 'Preservar horários e salvar'}
+          </button>
+        </footer>
+      </div>
+    </dialog>
+  )
+}
+
+function weekInput(hours: BusinessHour[]): BusinessHoursWeekInput {
+  return hours.map((item) => ({
+    weekday: item.weekday,
+    is_open: item.is_open,
+    opens_at: item.is_open ? item.opens_at : null,
+    closes_at: item.is_open ? item.closes_at : null,
+    break_starts_at: item.is_open ? item.break_starts_at : null,
+    break_ends_at: item.is_open ? item.break_ends_at : null,
+  }))
 }
 
 export function SettingsPage() {
@@ -73,6 +209,11 @@ export function SettingsPage() {
   const [blockStart, setBlockStart] = useState('')
   const [blockEnd, setBlockEnd] = useState('')
   const [blockReason, setBlockReason] = useState('')
+  const [hoursConfirmation, setHoursConfirmation] =
+    useState<HoursConfirmation | null>(null)
+  const [hoursConfirmationError, setHoursConfirmationError] = useState<
+    string | null
+  >(null)
 
   useEffect(() => {
     let isCurrent = true
@@ -130,23 +271,61 @@ export function SettingsPage() {
     setError(null)
 
     try {
-      for (const item of state.hours) {
-        const result = await updateBusinessHour(item.weekday, {
-          is_open: item.is_open,
-          opens_at: item.is_open ? item.opens_at : null,
-          closes_at: item.is_open ? item.closes_at : null,
-          break_starts_at: item.is_open ? item.break_starts_at : null,
-          break_ends_at: item.is_open ? item.break_ends_at : null,
-        })
-        if (result.error) {
-          setError(friendlySettingsError(result.error))
-          return
-        }
+      const hours = weekInput(state.hours)
+      const result = await updateBusinessHoursWeek(hours)
+      if (result.error) {
+        setError(friendlySettingsError(result.error))
+        return
+      }
+      if (!result.data.updated && result.data.requiresConfirmation) {
+        setHoursConfirmationError(null)
+        setHoursConfirmation({ hours, result: result.data })
+        return
       }
       setFeedback('Expediente atualizado com sucesso.')
       setLoadAttempt((attempt) => attempt + 1)
     } catch {
       setError('Não foi possível conectar ao serviço. Tente novamente.')
+    } finally {
+      setIsSavingHours(false)
+    }
+  }
+
+  async function confirmHoursWithConflicts() {
+    if (!hoursConfirmation || isSavingHours) return
+    setIsSavingHours(true)
+    setFeedback(null)
+    setError(null)
+    setHoursConfirmationError(null)
+
+    try {
+      const result = await updateBusinessHoursWeek(
+        hoursConfirmation.hours,
+        true,
+        hoursConfirmation.result.affectedBookingIds,
+      )
+      if (result.error) {
+        setHoursConfirmationError(friendlySettingsError(result.error))
+        return
+      }
+      if (!result.data.updated && result.data.requiresConfirmation) {
+        setHoursConfirmation({
+          hours: hoursConfirmation.hours,
+          result: result.data,
+        })
+        return
+      }
+
+      setHoursConfirmation(null)
+      setHoursConfirmationError(null)
+      setFeedback(
+        'Expediente atualizado. Os agendamentos informados foram preservados.',
+      )
+      setLoadAttempt((attempt) => attempt + 1)
+    } catch {
+      setHoursConfirmationError(
+        'Não foi possível conectar ao serviço. Tente novamente.',
+      )
     } finally {
       setIsSavingHours(false)
     }
@@ -262,7 +441,7 @@ export function SettingsPage() {
               Defina os horários disponíveis em cada dia da semana.
             </p>
           </div>
-          <button className="primary-button" type="submit" disabled={isSavingHours}>
+          <button className="primary-button" type="submit" disabled={isSavingHours || hoursConfirmation !== null}>
             {isSavingHours ? 'Salvando…' : 'Salvar expediente'}
           </button>
         </div>
@@ -270,7 +449,7 @@ export function SettingsPage() {
           {sortedHours.map((item) => {
             const hasBreak = item.break_starts_at !== null
             return (
-              <fieldset className="business-hour-row" key={item.weekday} disabled={isSavingHours}>
+              <fieldset className="business-hour-row" key={item.weekday} disabled={isSavingHours || hoursConfirmation !== null}>
                 <legend>{weekdays[item.weekday]}</legend>
                 <label className="settings-check"><input type="checkbox" checked={item.is_open} onChange={(event) => changeHour(item.weekday, { is_open: event.target.checked })} />Aberto</label>
                 <label>Abertura<input type="time" required={item.is_open} disabled={!item.is_open} value={timeInput(item.opens_at)} onChange={(event) => changeHour(item.weekday, { opens_at: event.target.value })} /></label>
@@ -321,6 +500,20 @@ export function SettingsPage() {
           </ul>
         )}
       </section>
+      {hoursConfirmation && (
+        <BusinessHoursConflictDialog
+          key={hoursConfirmation.result.affectedBookingIds.join('-')}
+          bookings={hoursConfirmation.result.affectedBookings}
+          conflictsChanged={hoursConfirmation.result.conflictsChanged}
+          error={hoursConfirmationError}
+          isSubmitting={isSavingHours}
+          onCancel={() => {
+            setHoursConfirmation(null)
+            setHoursConfirmationError(null)
+          }}
+          onConfirm={() => void confirmHoursWithConflicts()}
+        />
+      )}
     </section>
   )
 }

@@ -524,6 +524,21 @@ export type Database = {
           service_count: number
         }[]
       }
+      update_business_hours_week: {
+        Args: {
+          p_confirm_conflicts?: boolean
+          p_expected_affected_booking_ids?: number[] | null
+          p_hours: Json
+        }
+        Returns: {
+          affected_booking_count: number
+          affected_booking_ids: number[]
+          affected_bookings: Json
+          conflicts_changed: boolean
+          requires_confirmation: boolean
+          updated: boolean
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

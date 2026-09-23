@@ -4063,3 +4063,27 @@ textarea:disabled {
     align-items: center;
   }
 }
+
+.business-hours-conflict-list {
+  display: grid;
+  max-height: 280px;
+  margin: 16px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  gap: 8px;
+}
+
+.business-hours-conflict-list li {
+  display: grid;
+  padding: 11px 13px;
+  border: 1px solid #e6ddd5;
+  border-radius: 9px;
+  background: #fffdf9;
+  gap: 3px;
+}
+
+.business-hours-conflict-list span {
+  color: var(--muted);
+  font-size: 13px;
+}
