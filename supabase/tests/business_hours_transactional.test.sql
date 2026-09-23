@@ -90,31 +90,46 @@ where c.name = 'Cliente Conflito Expediente';
 create temporary table proposed_closed_week as
 select jsonb_agg(
   jsonb_build_object(
-    'weekday', weekday,
-    'is_open', weekday <> clock.weekday,
-    'opens_at', case when weekday = clock.weekday then null else '08:00' end,
-    'closes_at', case when weekday = clock.weekday then null else '18:00' end,
+    'weekday', day_series.weekday,
+    'is_open', day_series.weekday <> clock.weekday,
+    'opens_at', case
+      when day_series.weekday = clock.weekday then null
+      else '08:00'
+    end,
+    'closes_at', case
+      when day_series.weekday = clock.weekday then null
+      else '18:00'
+    end,
     'break_starts_at', null,
     'break_ends_at', null
   )
-  order by weekday
+  order by day_series.weekday
 ) as payload
-from generate_series(0, 6) as weekday
+from generate_series(0, 6) as day_series(weekday)
 cross join business_hours_clock as clock;
 
 create temporary table invalid_week as
 select jsonb_agg(
   jsonb_build_object(
-    'weekday', weekday,
+    'weekday', day_series.weekday,
     'is_open', true,
     'opens_at', '18:00',
     'closes_at', '08:00',
     'break_starts_at', null,
     'break_ends_at', null
   )
-  order by weekday
+  order by day_series.weekday
 ) as payload
-from generate_series(0, 6) as weekday;
+from generate_series(0, 6) as day_series(weekday);
+
+-- As fixtures sao criadas pelo owner antes de simular a requisicao da API.
+-- O papel authenticated precisa apenas le-las para montar os argumentos e as
+-- verificacoes; nenhuma permissao adicional e concedida a tabelas reais.
+grant select on table
+  business_hours_clock,
+  proposed_closed_week,
+  invalid_week
+to authenticated;
 
 set local role authenticated;
 set local "request.jwt.claims" =
@@ -159,8 +174,10 @@ select is(
   'RPC informa todos os agendamentos afetados'
 );
 select is(
-  (select is_open from public.business_hours
-   where weekday = (select weekday from business_hours_clock)),
+  (select bh.is_open from public.business_hours as bh
+   where bh.weekday = (
+     select clock.weekday from business_hours_clock as clock
+   )),
   true,
   'pre-visualizacao de conflitos nao altera o expediente'
 );
@@ -176,8 +193,10 @@ select is(
   'confirmacao com lista divergente e recusada'
 );
 select is(
-  (select is_open from public.business_hours
-   where weekday = (select weekday from business_hours_clock)),
+  (select bh.is_open from public.business_hours as bh
+   where bh.weekday = (
+     select clock.weekday from business_hours_clock as clock
+   )),
   true,
   'lista divergente continua sem alteracao parcial'
 );
@@ -194,8 +213,10 @@ select is(
   'confirmacao da lista exata atualiza a semana atomicamente'
 );
 select is(
-  (select is_open from public.business_hours
-   where weekday = (select weekday from business_hours_clock)),
+  (select bh.is_open from public.business_hours as bh
+   where bh.weekday = (
+     select clock.weekday from business_hours_clock as clock
+   )),
   false,
   'dia conflitante recebe o novo expediente'
 );
@@ -217,9 +238,14 @@ select throws_ok(
   'only the authorized salon account can update business hours',
   'usuario autenticado fora da allowlist nao altera expediente'
 );
+
+-- O usuario fora da allowlist nao enxerga bookings por RLS. Volte ao owner
+-- somente depois de comprovar a rejeicao para verificar o estado fisico da
+-- fixture e diferenciar invisibilidade de exclusao ou alteracao.
+reset role;
 select is(
-  (select status from public.bookings
-   where notes = 'Conflito expediente transacional'),
+  (select b.status from public.bookings as b
+   where b.notes = 'Conflito expediente transacional'),
   'scheduled'::text,
   'falha de autorizacao preserva os agendamentos'
 );

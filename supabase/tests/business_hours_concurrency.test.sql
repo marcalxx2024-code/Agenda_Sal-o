@@ -53,19 +53,22 @@ from (
 create temporary table concurrent_closed_week as
 select jsonb_agg(
   jsonb_build_object(
-    'weekday', weekday,
-    'is_open', weekday <> clock.weekday,
-    'opens_at', case when weekday = clock.weekday then null else '00:00' end,
+    'weekday', day_series.weekday,
+    'is_open', day_series.weekday <> clock.weekday,
+    'opens_at', case
+      when day_series.weekday = clock.weekday then null
+      else '00:00'
+    end,
     'closes_at', case
-      when weekday = clock.weekday then null
+      when day_series.weekday = clock.weekday then null
       else '23:59:59.999999'
     end,
     'break_starts_at', null,
     'break_ends_at', null
   )
-  order by weekday
+  order by day_series.weekday
 ) as payload
-from generate_series(0, 6) as weekday
+from generate_series(0, 6) as day_series(weekday)
 cross join concurrent_hours_clock as clock;
 
 -- Mantem a RPC dentro da secao critica para a criacao concorrente alcancar o
@@ -186,8 +189,10 @@ select is(
   'booking fora do novo expediente nao e gravado'
 );
 select is(
-  (select is_open from public.business_hours
-   where weekday = (select weekday from concurrent_hours_clock)),
+  (select bh.is_open from public.business_hours as bh
+   where bh.weekday = (
+     select clock.weekday from concurrent_hours_clock as clock
+   )),
   false,
   'estado final preserva a semana confirmada'
 );
