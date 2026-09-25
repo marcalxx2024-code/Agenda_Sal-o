@@ -11,6 +11,7 @@ import {
   listBookingFormOptions,
   updateBooking,
   type AgendaBookingListItem,
+  type BookingClientOption,
   type BookingFormOptions,
   type BookingsDataError,
   type CreateBookingInput,
@@ -30,13 +31,18 @@ interface BookingDialogBaseProps {
 
 interface BookingCreateDialogProps extends BookingDialogBaseProps {
   booking?: undefined
-  onCreated: (booking: CreatedBooking) => void
+  initialDate?: string
+  onCreated: (
+    booking: CreatedBooking,
+    client: Pick<BookingClientOption, 'id' | 'name'> | null,
+  ) => void
   onUpdated?: never
   onInvalidated?: never
 }
 
 interface BookingEditDialogProps extends BookingDialogBaseProps {
   booking: AgendaBookingListItem
+  initialDate?: never
   onCreated?: never
   onUpdated: (booking: UpdatedBooking) => void
   onInvalidated: () => void
@@ -119,12 +125,18 @@ function bookingManualDurationInput(booking?: AgendaBookingListItem) {
   const currentDuration = Math.round(
     (endsAt.getTime() - startsAt.getTime()) / (60 * 1000),
   )
+  const hasServiceWithoutDefaultDuration = (
+    booking.booking_services ?? []
+  ).some((service) => service.estimated_duration_minutes === null)
   const snapshotDuration = (booking.booking_services ?? []).reduce(
-    (total, service) => total + service.estimated_duration_minutes,
+    (total, service) =>
+      total + (service.estimated_duration_minutes ?? 0),
     0,
   )
 
-  if (currentDuration <= 0 || currentDuration === snapshotDuration) return ''
+  if (currentDuration <= 0) return ''
+  if (hasServiceWithoutDefaultDuration) return String(currentDuration)
+  if (currentDuration === snapshotDuration) return ''
   return String(currentDuration)
 }
 
@@ -176,6 +188,9 @@ function validateBookingForm(
   const selectedServices = selectedServiceIds.map((serviceId) =>
     options.services.find((service) => service.id === serviceId),
   )
+  const hasServiceWithoutDefaultDuration = selectedServices.some(
+    (service) => service?.estimated_duration_minutes === null,
+  )
 
   if (selectedServiceIds.length === 0) {
     errors.services = 'Selecione pelo menos um serviço.'
@@ -183,10 +198,6 @@ function validateBookingForm(
     errors.services = 'Revise os serviços selecionados e tente novamente.'
   } else if (selectedServices.some((service) => !service?.active)) {
     errors.services = 'Remova os serviços inativos antes de salvar.'
-  } else if (
-    selectedServices.some((service) => service?.estimated_duration_minutes === null)
-  ) {
-    errors.services = 'Remova os serviços sem duração estimada antes de salvar.'
   }
 
   const trimmedDuration = durationMinutes.trim()
@@ -202,6 +213,8 @@ function validateBookingForm(
     } else {
       parsedDuration = duration
     }
+  } else if (hasServiceWithoutDefaultDuration) {
+    errors.duration = 'Informe a duração deste agendamento.'
   }
 
   if (Object.keys(errors).length > 0 || !selectedClient || !startsAtIso) {
@@ -286,6 +299,9 @@ function friendlySaveError(error: BookingsDataError, isEditing: boolean) {
     }
 
     if (databaseMessage.includes('duration')) {
+      if (databaseMessage.includes('required when')) {
+        return 'Informe a duração deste agendamento.'
+      }
       return 'Informe uma duração manual inteira maior que zero.'
     }
 
@@ -339,7 +355,9 @@ function unexpectedSaveError(error: unknown) {
 export function BookingDialog(props: BookingDialogProps) {
   const { booking, onClose } = props
   const dialogRef = useRef<HTMLDialogElement>(null)
-  const initialDateTime = isoToSalonInputValues(booking?.starts_at)
+  const initialDateTime = booking
+    ? isoToSalonInputValues(booking.starts_at)
+    : { date: props.initialDate ?? '', time: '' }
   const [clientId, setClientId] = useState(
     booking?.client?.id === undefined ? '' : String(booking.client.id),
   )
@@ -427,13 +445,13 @@ export function BookingDialog(props: BookingDialogProps) {
     0,
   )
   const parsedManualDuration = parsePositiveInteger(durationMinutes.trim())
+  const hasSelectedServiceWithoutDuration = selectedServices.some(
+    (service) => service.estimated_duration_minutes === null,
+  )
   const activeClientCount =
     options?.clients.filter((client) => client.active).length ?? 0
   const usableServiceCount =
-    options?.services.filter(
-      (service) =>
-        service.active && service.estimated_duration_minutes !== null,
-    ).length ?? 0
+    options?.services.filter((service) => service.active).length ?? 0
   const canSubmit = Boolean(
     options && activeClientCount > 0 && usableServiceCount > 0,
   )
@@ -514,16 +532,17 @@ export function BookingDialog(props: BookingDialogProps) {
     setSubmission({ status: 'idle' })
 
     if (!validation.input) return
+    const validatedInput = validation.input
 
     setSubmission({ status: 'submitting' })
 
     try {
       const result = booking
         ? await updateBooking({
-            ...validation.input,
+            ...validatedInput,
             p_booking_id: booking.id,
           } satisfies UpdateBookingInput)
-        : await createBooking(validation.input)
+        : await createBooking(validatedInput)
 
       if (result.error) {
         const databaseMessage = result.error.message.toLocaleLowerCase('en-US')
@@ -551,7 +570,15 @@ export function BookingDialog(props: BookingDialogProps) {
       if (booking) {
         props.onUpdated(result.data)
       } else {
-        props.onCreated(result.data)
+        const selectedClient = options.clients.find(
+          (client) => client.id === validatedInput.p_client_id,
+        )
+        props.onCreated(
+          result.data,
+          selectedClient
+            ? { id: selectedClient.id, name: selectedClient.name }
+            : null,
+        )
       }
     } catch (error) {
       setSubmission({
@@ -814,7 +841,7 @@ export function BookingDialog(props: BookingDialogProps) {
                     service.estimated_duration_minutes
                   const hasDuration = estimatedDuration !== null
                   const isSelected = selectedServiceIds.includes(service.id)
-                  const isAvailable = service.active && hasDuration
+                  const isAvailable = service.active
                   const availabilityClass = isAvailable
                     ? ''
                     : isSelected
@@ -827,9 +854,8 @@ export function BookingDialog(props: BookingDialogProps) {
                       ? 'Inativo — remova para salvar'
                       : 'Inativo — indisponível'
                   } else if (!hasDuration) {
-                    serviceDetails = isSelected
-                      ? 'Sem duração — remova para salvar'
-                      : 'Sem duração estimada — indisponível'
+                    serviceDetails =
+                      'Sem duração padrão — informe a duração total'
                   } else {
                     serviceDetails = durationLabel(estimatedDuration)
                   }
@@ -872,7 +898,10 @@ export function BookingDialog(props: BookingDialogProps) {
 
           <div className="client-form__field">
             <label htmlFor="booking-duration">
-              Duração total em minutos <span>Opcional</span>
+              Duração total em minutos{' '}
+              <span>
+                {hasSelectedServiceWithoutDuration ? 'Obrigatório' : 'Opcional'}
+              </span>
             </label>
             <input
               id="booking-duration"
@@ -884,6 +913,7 @@ export function BookingDialog(props: BookingDialogProps) {
               step={1}
               value={durationMinutes}
               onChange={(event) => setDurationMinutes(event.target.value)}
+              required={hasSelectedServiceWithoutDuration}
               disabled={isSubmitting}
               aria-invalid={Boolean(formErrors.duration)}
               aria-describedby={`booking-duration-help booking-duration-summary${
@@ -891,7 +921,9 @@ export function BookingDialog(props: BookingDialogProps) {
               }`}
             />
             <small id="booking-duration-help" className="client-form__help">
-              Deixe vazio para o banco usar a soma das durações dos serviços.
+              {hasSelectedServiceWithoutDuration
+                ? 'Informe a duração total deste agendamento.'
+                : 'Deixe vazio para o banco usar a soma das durações dos serviços.'}
             </small>
             <div
               className="booking-form__duration-summary"
@@ -900,9 +932,11 @@ export function BookingDialog(props: BookingDialogProps) {
             >
               <span>Previsão pelos serviços</span>
               <strong>
-                {suggestedDuration > 0
-                  ? durationLabel(suggestedDuration)
-                  : 'Selecione os serviços'}
+                {selectedServices.length === 0
+                  ? 'Selecione os serviços'
+                  : hasSelectedServiceWithoutDuration
+                    ? 'Duração manual necessária'
+                    : durationLabel(suggestedDuration)}
               </strong>
               {durationMinutes.trim() && parsedManualDuration !== null && (
                 <small>

@@ -115,6 +115,34 @@ export function addDaysToDateValue(value: string, days: number) {
   return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`
 }
 
+export function startOfMonthDateValue(value: string) {
+  const [year, month] = value.split('-').map(Number)
+  return `${year}-${pad(month)}-01`
+}
+
+export function addMonthsToDateValue(value: string, months: number) {
+  const [year, month, day] = value.split('-').map(Number)
+  const targetMonth = new Date(Date.UTC(year, month - 1 + months, 1))
+  const lastDay = new Date(
+    Date.UTC(targetMonth.getUTCFullYear(), targetMonth.getUTCMonth() + 1, 0),
+  ).getUTCDate()
+  const date = new Date(
+    Date.UTC(
+      targetMonth.getUTCFullYear(),
+      targetMonth.getUTCMonth(),
+      Math.min(day, lastDay),
+    ),
+  )
+
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`
+}
+
+export function monthDateValues(value: string) {
+  const from = startOfMonthDateValue(value)
+  const nextMonth = addMonthsToDateValue(from, 1)
+  return { from, to: addDaysToDateValue(nextMonth, -1) }
+}
+
 export function salonDateRange(from: string, toInclusive: string) {
   const start = from ? salonDateTimeToIso(from, '00:00') : null
   const end = toInclusive

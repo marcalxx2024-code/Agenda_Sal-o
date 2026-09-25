@@ -120,7 +120,7 @@ export type Database = {
         Row: {
           booking_id: number
           created_at: string
-          estimated_duration_minutes: number
+          estimated_duration_minutes: number | null
           id: number
           service_id: number
           service_name: string
@@ -128,7 +128,7 @@ export type Database = {
         Insert: {
           booking_id: number
           created_at?: string
-          estimated_duration_minutes: number
+          estimated_duration_minutes?: number | null
           id?: never
           service_id: number
           service_name: string
@@ -136,7 +136,7 @@ export type Database = {
         Update: {
           booking_id?: number
           created_at?: string
-          estimated_duration_minutes?: number
+          estimated_duration_minutes?: number | null
           id?: never
           service_id?: number
           service_name?: string

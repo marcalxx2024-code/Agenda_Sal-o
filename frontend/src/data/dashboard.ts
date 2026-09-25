@@ -41,6 +41,10 @@ export type DashboardResult =
   | { data: DashboardData; error: null }
   | { data: null; error: DashboardDataError }
 
+export type DashboardBookingsResult =
+  | { data: DashboardBooking[]; error: null }
+  | { data: null; error: DashboardDataError }
+
 function toDashboardError(error: PostgrestError): DashboardDataError {
   return {
     code: error.code,
@@ -48,6 +52,38 @@ function toDashboardError(error: PostgrestError): DashboardDataError {
     details: error.details,
     hint: error.hint,
   }
+}
+
+export async function loadDashboardBookings(
+  from: string,
+  toInclusive: string,
+): Promise<DashboardBookingsResult> {
+  const range = salonDateRange(from, toInclusive)
+
+  if (!range.start || !range.end) {
+    return {
+      data: null,
+      error: {
+        code: 'INVALID_DATE_RANGE',
+        message: 'O intervalo informado para o dashboard é inválido.',
+        details: null,
+        hint: null,
+      },
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('id, starts_at, status, client:clients!bookings_client_id_fkey(id, name)')
+    .gte('starts_at', range.start)
+    .lt('starts_at', range.end)
+    .in('status', ['scheduled', 'confirmed'])
+    .order('starts_at', { ascending: true })
+    .order('id', { ascending: true })
+
+  if (error) return { data: null, error: toDashboardError(error) }
+
+  return { data: data ?? [], error: null }
 }
 
 export async function loadDashboard(): Promise<DashboardResult> {

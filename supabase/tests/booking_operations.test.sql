@@ -326,8 +326,9 @@ select throws_ok(
       (select base_at + interval '8 hours' from booking_test_clock),
       array[(select id from public.services where name = 'Servico Operacoes Sem Duracao')]
     )$$,
-  '55000', 'all services must have an estimated duration',
-  'create_booking rejeita servico sem duracao'
+  '22023',
+  'p_duration_minutes is required when a service has no estimated duration',
+  'create_booking exige duracao manual para servico sem duracao padrao'
 );
 select throws_ok(
   $$select * from public.create_booking(

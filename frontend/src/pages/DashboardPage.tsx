@@ -1,12 +1,33 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { loadDashboard, type DashboardData } from '../data/dashboard'
-import { formatDateOnly, salonDateTimeFormatter } from '../lib/salon-time'
+import { BookingDialog } from '../components/BookingDialog'
+import { MonthlyCalendar } from '../components/MonthlyCalendar'
+import type { CreatedBooking } from '../data/bookings'
+import {
+  loadDashboard,
+  loadDashboardBookings,
+  type DashboardBooking,
+  type DashboardData,
+} from '../data/dashboard'
+import {
+  addMonthsToDateValue,
+  formatDateOnly,
+  isoToSalonInputValues,
+  monthDateValues,
+  salonDateTimeFormatter,
+  salonDateValue,
+  startOfMonthDateValue,
+} from '../lib/salon-time'
 
 type DashboardState =
   | { status: 'loading' }
   | { status: 'error' }
   | { status: 'loaded'; data: DashboardData }
+
+type MonthBookingsState =
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'loaded'; bookings: DashboardBooking[] }
 
 const dayFormatter = salonDateTimeFormatter({
   day: '2-digit',
@@ -15,9 +36,24 @@ const dayFormatter = salonDateTimeFormatter({
   minute: '2-digit',
 })
 
+const timeFormatter = salonDateTimeFormatter({
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
 export function DashboardPage() {
+  const [today] = useState(() => salonDateValue())
   const [state, setState] = useState<DashboardState>({ status: 'loading' })
   const [loadAttempt, setLoadAttempt] = useState(0)
+  const [visibleMonth, setVisibleMonth] = useState(() =>
+    startOfMonthDateValue(today),
+  )
+  const [selectedDate, setSelectedDate] = useState(today)
+  const [monthState, setMonthState] = useState<MonthBookingsState>({
+    status: 'loading',
+  })
+  const [monthLoadAttempt, setMonthLoadAttempt] = useState(0)
+  const [isBookingFormOpen, setIsBookingFormOpen] = useState(false)
 
   useEffect(() => {
     let isCurrent = true
@@ -37,6 +73,95 @@ export function DashboardPage() {
       isCurrent = false
     }
   }, [loadAttempt])
+
+  useEffect(() => {
+    let isCurrent = true
+    const range = monthDateValues(visibleMonth)
+
+    void loadDashboardBookings(range.from, range.to)
+      .then((result) => {
+        if (!isCurrent) return
+        setMonthState(
+          result.error
+            ? { status: 'error' }
+            : { status: 'loaded', bookings: result.data },
+        )
+      })
+      .catch(() => {
+        if (isCurrent) setMonthState({ status: 'error' })
+      })
+
+    return () => {
+      isCurrent = false
+    }
+  }, [visibleMonth, monthLoadAttempt])
+
+  const bookingsByDate = useMemo(() => {
+    const grouped = new Map<string, DashboardBooking[]>()
+
+    if (monthState.status !== 'loaded') return grouped
+
+    for (const booking of monthState.bookings) {
+      const date = isoToSalonInputValues(booking.starts_at).date
+      if (!date) continue
+      const bookings = grouped.get(date) ?? []
+      bookings.push(booking)
+      grouped.set(date, bookings)
+    }
+
+    return grouped
+  }, [monthState])
+
+  function navigateMonth(offset: number) {
+    const nextMonth = startOfMonthDateValue(
+      addMonthsToDateValue(visibleMonth, offset),
+    )
+    setMonthState({ status: 'loading' })
+    setVisibleMonth(nextMonth)
+    setSelectedDate(nextMonth)
+  }
+
+  function retryMonthLoading() {
+    setMonthState({ status: 'loading' })
+    setMonthLoadAttempt((attempt) => attempt + 1)
+  }
+
+  function handleBookingCreated(
+    booking: CreatedBooking,
+    client: DashboardBooking['client'],
+  ) {
+    const createdBooking: DashboardBooking = {
+      id: booking.booking_id,
+      starts_at: booking.booking_starts_at,
+      status: booking.booking_status,
+      client,
+    }
+    const createdDate = isoToSalonInputValues(createdBooking.starts_at).date
+    const visibleRange = monthDateValues(visibleMonth)
+
+    setIsBookingFormOpen(false)
+    setMonthState((current) => {
+      if (
+        current.status !== 'loaded' ||
+        createdDate < visibleRange.from ||
+        createdDate > visibleRange.to ||
+        current.bookings.some((item) => item.id === createdBooking.id)
+      ) {
+        return current
+      }
+
+      return {
+        status: 'loaded',
+        bookings: [...current.bookings, createdBooking].sort(
+          (first, second) =>
+            first.starts_at.localeCompare(second.starts_at) ||
+            first.id - second.id,
+        ),
+      }
+    })
+    setMonthLoadAttempt((attempt) => attempt + 1)
+    setLoadAttempt((attempt) => attempt + 1)
+  }
 
   if (state.status === 'loading') {
     return (
@@ -69,6 +194,14 @@ export function DashboardPage() {
   }
 
   const { data } = state
+  const selectedBookings = bookingsByDate.get(selectedDate) ?? []
+  const isTodaySelected = selectedDate === today
+  const selectedDateLabel = formatDateOnly(selectedDate, {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  })
   const cards = [
     {
       label: 'Agendamentos de hoje',
@@ -128,6 +261,82 @@ export function DashboardPage() {
           <span />
         </div>
       </section>
+
+      <div className="dashboard-calendar-area">
+        <MonthlyCalendar
+          visibleMonth={visibleMonth}
+          selectedDate={selectedDate}
+          today={today}
+          datesWithBookings={new Set(bookingsByDate.keys())}
+          isLoading={monthState.status === 'loading'}
+          hasError={monthState.status === 'error'}
+          onPreviousMonth={() => navigateMonth(-1)}
+          onNextMonth={() => navigateMonth(1)}
+          onSelectDate={setSelectedDate}
+          onRetry={retryMonthLoading}
+        />
+
+        <section
+          className="dashboard-list-panel dashboard-day-bookings"
+          aria-labelledby="selected-bookings-title"
+        >
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Agenda selecionada</span>
+              <h3 id="selected-bookings-title">
+                {isTodaySelected ? 'Agendamentos de hoje' : 'Agendamentos do dia'}
+              </h3>
+              <p className="dashboard-day-bookings__date">{selectedDateLabel}</p>
+            </div>
+            <div className="dashboard-day-bookings__actions">
+              <button
+                className="primary-button dashboard-day-bookings__new"
+                type="button"
+                onClick={() => setIsBookingFormOpen(true)}
+              >
+                + Novo agendamento
+              </button>
+              <Link to="/agenda">Ver agenda</Link>
+            </div>
+          </div>
+
+          {monthState.status === 'loading' && (
+            <p className="dashboard-list-empty" role="status">
+              Carregando agendamentos…
+            </p>
+          )}
+          {monthState.status === 'error' && (
+            <div className="dashboard-day-bookings__error" role="alert">
+              <p>Não foi possível consultar os horários desta data.</p>
+              <button type="button" onClick={retryMonthLoading}>
+                Tentar novamente
+              </button>
+            </div>
+          )}
+          {monthState.status === 'loaded' && selectedBookings.length === 0 && (
+            <div className="dashboard-day-bookings__empty" role="status">
+              <span aria-hidden="true">○</span>
+              <p>Nenhum agendamento para este dia.</p>
+              <small>Selecione outra data para consultar os horários.</small>
+            </div>
+          )}
+          {monthState.status === 'loaded' && selectedBookings.length > 0 && (
+            <ul>
+              {selectedBookings.map((booking) => (
+                <li key={booking.id}>
+                  <div>
+                    <strong>{booking.client?.name ?? 'Cliente indisponível'}</strong>
+                    <span>{timeFormatter.format(new Date(booking.starts_at))}</span>
+                  </div>
+                  <span className={`booking-status booking-status--${booking.status}`}>
+                    {booking.status === 'confirmed' ? 'Confirmado' : 'Agendado'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
 
       <section className="overview-section" aria-labelledby="overview-title">
         <div className="section-heading">
@@ -226,6 +435,14 @@ export function DashboardPage() {
           )}
         </section>
       </div>
+
+      {isBookingFormOpen && (
+        <BookingDialog
+          initialDate={selectedDate}
+          onClose={() => setIsBookingFormOpen(false)}
+          onCreated={handleBookingCreated}
+        />
+      )}
     </div>
   )
 }

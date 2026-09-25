@@ -4087,3 +4087,337 @@ textarea:disabled {
   color: var(--muted);
   font-size: 13px;
 }
+
+/* Dashboard monthly calendar */
+
+.dashboard-calendar-area {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.75fr);
+  align-items: stretch;
+  gap: 18px;
+}
+
+.monthly-calendar {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid rgba(118, 80, 84, 0.14);
+  border-radius: var(--radius-large);
+  background: rgba(255, 253, 249, 0.97);
+  box-shadow: var(--shadow-soft);
+}
+
+.monthly-calendar__header {
+  display: flex;
+  margin-bottom: 20px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.monthly-calendar__header h3 {
+  margin: 6px 0 0;
+  color: #3d3632;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 27px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.monthly-calendar__navigation {
+  display: flex;
+  gap: 9px;
+}
+
+.monthly-calendar__navigation button {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid #ddd1c6;
+  border-radius: 12px;
+  color: var(--rose-deep);
+  background: #fffefa;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 31px;
+  line-height: 1;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
+}
+
+.monthly-calendar__navigation button:hover {
+  border-color: #c9aeac;
+  background: #f8efec;
+}
+
+.monthly-calendar__navigation button:active {
+  transform: scale(0.96);
+}
+
+.monthly-calendar__weekdays,
+.monthly-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.monthly-calendar__weekdays {
+  margin-bottom: 7px;
+  color: #7d716a;
+}
+
+.monthly-calendar__weekdays abbr {
+  padding: 5px 2px;
+  text-align: center;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.monthly-calendar__grid {
+  gap: 6px;
+}
+
+.monthly-calendar__day,
+.monthly-calendar__empty-cell {
+  min-width: 0;
+  min-height: 62px;
+  border-radius: 12px;
+}
+
+.monthly-calendar__day {
+  position: relative;
+  display: flex;
+  padding: 9px 5px 8px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  color: #4d4540;
+  background: transparent;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.monthly-calendar__day:hover {
+  border-color: #e0d4ca;
+  background: var(--sand-soft);
+}
+
+.monthly-calendar__day:active {
+  transform: scale(0.97);
+}
+
+.monthly-calendar__day--today {
+  border-color: rgba(125, 128, 105, 0.5);
+  color: #555a46;
+  background: var(--olive-soft);
+  box-shadow: inset 0 0 0 1px rgba(125, 128, 105, 0.16);
+}
+
+.monthly-calendar__day--selected,
+.monthly-calendar__day--selected:hover {
+  border-color: var(--rose-deep);
+  color: #fffdf9;
+  background: var(--rose-deep);
+  box-shadow: 0 6px 14px rgba(118, 80, 84, 0.2);
+}
+
+.monthly-calendar__day--today.monthly-calendar__day--selected {
+  box-shadow:
+    inset 0 0 0 2px #fffdf9,
+    0 0 0 2px rgba(125, 128, 105, 0.42),
+    0 6px 14px rgba(118, 80, 84, 0.2);
+}
+
+.monthly-calendar__booking-dot {
+  position: absolute;
+  bottom: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--rose);
+}
+
+.monthly-calendar__day--selected .monthly-calendar__booking-dot {
+  background: #fff7ee;
+}
+
+.monthly-calendar__feedback {
+  margin: 14px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.monthly-calendar__feedback--error {
+  display: flex;
+  padding: 11px 13px;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid rgba(154, 63, 69, 0.14);
+  border-radius: 10px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  gap: 12px;
+}
+
+.monthly-calendar__feedback--error button,
+.dashboard-day-bookings__error button {
+  min-height: 38px;
+  padding: 7px 11px;
+  border: 1px solid rgba(154, 63, 69, 0.25);
+  border-radius: 8px;
+  color: var(--danger);
+  background: #fffdf9;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.dashboard-day-bookings {
+  min-width: 0;
+}
+
+.dashboard-day-bookings .section-heading {
+  align-items: flex-start;
+}
+
+.dashboard-day-bookings__actions {
+  display: grid;
+  min-width: 172px;
+  justify-items: stretch;
+  gap: 10px;
+}
+
+.dashboard-day-bookings__new {
+  min-height: 48px;
+  margin: 0;
+  padding: 11px 16px;
+  white-space: nowrap;
+}
+
+.dashboard-list-panel .dashboard-day-bookings__actions a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dashboard-day-bookings__date {
+  margin: 5px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.dashboard-day-bookings ul {
+  max-height: 390px;
+  overflow-y: auto;
+}
+
+.dashboard-day-bookings__empty {
+  display: grid;
+  min-height: 180px;
+  padding: 24px 12px;
+  place-content: center;
+  text-align: center;
+}
+
+.dashboard-day-bookings__empty > span {
+  color: var(--sand);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.dashboard-day-bookings__empty p {
+  margin: 9px 0 3px;
+  color: #514943;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dashboard-day-bookings__empty small {
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.dashboard-day-bookings__error {
+  display: grid;
+  min-height: 150px;
+  padding: 20px;
+  place-content: center;
+  text-align: center;
+  gap: 12px;
+}
+
+.dashboard-day-bookings__error p {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-calendar-area {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-day-bookings ul {
+    max-height: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .dashboard-day-bookings__actions {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .monthly-calendar {
+    padding: 18px 14px;
+  }
+
+  .monthly-calendar__header {
+    margin-bottom: 15px;
+  }
+
+  .monthly-calendar__header h3 {
+    font-size: 23px;
+  }
+
+  .monthly-calendar__navigation button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .monthly-calendar__grid {
+    gap: 3px;
+  }
+
+  .monthly-calendar__day,
+  .monthly-calendar__empty-cell {
+    min-height: 48px;
+    border-radius: 10px;
+  }
+
+  .monthly-calendar__day {
+    font-size: 14px;
+  }
+
+  .monthly-calendar__booking-dot {
+    bottom: 5px;
+  }
+
+  .monthly-calendar__feedback--error {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
